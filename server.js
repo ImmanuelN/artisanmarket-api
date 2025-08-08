@@ -44,7 +44,11 @@ import { notFound } from './middleware/notFound.js'
 
 // Connect to databases
 connectDB()
-connectRedis()
+if (process.env.REDIS_URL) {
+  connectRedis()
+} else {
+  console.warn('⚠️  Redis not configured (REDIS_URL missing). Continuing without Redis.')
+}
 
 // MongoDB connection event listeners
 mongoose.connection.on('connected', () => {
