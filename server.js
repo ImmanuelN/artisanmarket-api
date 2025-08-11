@@ -198,6 +198,8 @@ const corsOptions = {
     
     const allowedOrigins = [
       process.env.CLIENT_URL || "http://localhost:5172",
+      "http://localhost:5000",
+      "https://artisanmarket-api.onrender.com",
       "http://localhost:5172",
       "http://localhost:3000", // Common React dev port
       "http://127.0.0.1:5172",
