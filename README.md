@@ -510,3 +510,9 @@ socket.on('new-order', (order) => {
 ## License
 
 This project is licensed under the **MIT License**.
+
+## Contact
+
+For any inquiries, please contact:
+- **Immanuel Nakale**: [nakaleimmanuel6@gmail.com](mailto:nakaleimmanuel6@gmail.com)
+- **GitHub**: [ImmanuelN](https://github.com/ImmanuelN)
