@@ -102,17 +102,21 @@ jobs:
             echo "::warning::No ESLint configuration found in this repository, so the Code-stage lint gate is inactive. Add .eslintrc.json (or eslint.config.js) to activate it."
           fi
 
+      # Every Code-stage scanner reports on every run. Without !cancelled() a
+      # single failing scanner short-circuits the rest of the job, so a lint
+      # failure would silently suppress secret scanning and SAST.
       - name: Gitleaks (secret scanning)
+        if: '!cancelled()'
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarQube (SAST)
-        if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
+        if: '!cancelled() && env.SONAR_TOKEN != '''' && env.SONAR_HOST_URL != '''''
         uses: SonarSource/sonarqube-scan-action@v4
 
       - name: SonarQube not configured
-        if: env.SONAR_TOKEN == '' || env.SONAR_HOST_URL == ''
+        if: '!cancelled() && (env.SONAR_TOKEN == '''' || env.SONAR_HOST_URL == '''')'
         run: echo "::warning::SONAR_TOKEN / SONAR_HOST_URL are not set, so the SonarQube SAST gate was skipped."
 
   # ---- Code (4.3.4): SCA baseline — cheap enough to run on every branch ----
