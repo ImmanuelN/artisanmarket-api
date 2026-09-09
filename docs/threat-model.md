@@ -40,7 +40,7 @@ The pipeline in `.github/workflows/pipeline.yml` applies these controls cumulati
 |---|---|---|---|---|
 | T1 | Product / vendor query endpoints | Tampering | User-controlled query values reaching Mongoose filters can smuggle query operators (`$ne`, `$gt`, `$where`) and alter the filter — NoSQL injection | SAST gate (SonarQube) at Code stage; validate and cast with `express-validator` before building filters |
 | T2 | Review submission (`models/Review.js`) | Tampering / Elevation of Privilege | Review text is stored verbatim and served to the SPA; an unescaped render path would execute it as script for later visitors (stored XSS) | SAST + DAST gates (SonarQube, OWASP ZAP); sanitise on write, rely on React escaping on read |
-| T3 | Admin token verification | Spoofing / Information Disclosure | `routes/adminRoutes.js:14` verifies with `process.env.JWT_SECRET \|\| 'fallback-secret'`. If `JWT_SECRET` is ever unset, admin tokens are verifiable against a public constant, letting an attacker mint admin sessions | Secret-scanning gate (Gitleaks) at Code stage; **open finding** — remove the fallback and fail fast when `JWT_SECRET` is absent |
+| T3 | Credential environment variables | Spoofing / Information Disclosure | Eleven call sites across six files fall back to a hardcoded literal when a credential variable is unset. `routes/adminRoutes.js:14` and `routes/vendorRoutes.js:17` both verify tokens with `process.env.JWT_SECRET \|\| 'fallback-secret'`, so an unset `JWT_SECRET` makes admin and vendor sessions forgeable against a public constant. `server.js:134` and `routes/paymentRoutes.js:10` fall back to `'sk_test_placeholder'` for Stripe; `server.js:89-90` and `routes/paymentRoutes.js:24-25` to `'test_client_id'` / `'test_secret'` for Plaid | ESLint `no-restricted-syntax` rule in `.eslintrc.json` blocks the pattern at the Code stage, plus the Gitleaks gate; **open finding — the Code stage fails on this until remediated.** Remove each fallback and fail fast when the variable is absent |
 | T4 | Login / register | Spoofing | Credential stuffing or brute force against `/api/auth` | **Mitigated** — `express-rate-limit` at `server.js:189` caps each IP at 100 requests per 15 min across `/api/`. Consider a stricter per-route limit on auth endpoints |
 | T5 | Third-party packages | Tampering | A direct or transitive dependency could ship a known vulnerability | SCA gates: `npm audit` on every branch, Snyk at Build stage (staging and main) |
 | T6 | Container image | Tampering | Base image or OS packages could carry known CVEs | Container scan (Trivy) at Build stage — **inactive**, no `Dockerfile` in the repository yet |
@@ -49,10 +49,20 @@ The pipeline in `.github/workflows/pipeline.yml` applies these controls cumulati
 | T9 | Payments (Stripe, Plaid) | Repudiation / Tampering | Stripe webhooks mutate order and balance state; a forged webhook could mark orders paid | Raw-body handler at `server.js:247` preserves the signature payload; `STRIPE_WEBHOOK_SECRET` must be verified on every webhook — confirm during Code review |
 | T10 | Media upload (`routes/uploadRoutes.js`) | Denial of Service / Tampering | Multer accepts up to 10 MB; unrestricted type or volume could exhaust storage or serve hostile files | Enforce MIME allow-listing and per-user quotas; DAST gate exercises the endpoint |
 
-T3 is the live "before" case for Chapter 5: it is a real hardcoded fallback secret
-in the current codebase, kept in place so the Code-stage Gitleaks and SonarQube gates
-have something genuine to catch and report on. T6 and T7 are staged controls — the
-pipeline steps exist and self-activate as soon as the container and IaC artifacts land.
+T3 is the live "before" case for Chapter 5: eleven real hardcoded credential
+fallbacks in the current codebase, detected by the Code-stage ESLint security
+ruleset (`.eslintrc.json`). Running `npm run lint` reproduces the full list, which
+is the measured "before" figure for the remediation chapter. T6 and T7 are staged
+controls — the pipeline steps exist and self-activate as soon as the container and
+IaC artifacts land.
+
+### Code-stage ruleset
+
+`.eslintrc.json` is scoped so that a red Code stage always means a security finding:
+security rules are errors, while stylistic and correctness noise is downgraded to
+warnings. Alongside T3 it blocks `eval`/`Function` construction, `javascript:` URLs,
+prototype tampering, and the deprecated `crypto.createCipher`/`createDecipher`
+(superseded by the `createCipheriv` usage already in `utils/encryption.js`).
 
 ## Sign-off
 

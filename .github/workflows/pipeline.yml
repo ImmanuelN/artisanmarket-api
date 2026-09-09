@@ -96,7 +96,7 @@ jobs:
 
       - name: ESLint (security ruleset)
         run: |
-          if ls .eslintrc* eslint.config.* >/dev/null 2>&1; then
+          if ls .eslintrc* >/dev/null 2>&1 || ls eslint.config.* >/dev/null 2>&1; then
             npm run lint
           else
             echo "::warning::No ESLint configuration found in this repository, so the Code-stage lint gate is inactive. Add .eslintrc.json (or eslint.config.js) to activate it."

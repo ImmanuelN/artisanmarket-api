@@ -1,0 +1,66 @@
+{
+  "root": true,
+  "env": {
+    "node": true,
+    "es2022": true,
+    "jest": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "extends": ["eslint:recommended"],
+  "ignorePatterns": ["node_modules/", "coverage/", "dist/", "build/", "*.min.js"],
+  "rules": {
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "no-script-url": "error",
+    "no-proto": "error",
+    "no-caller": "error",
+    "no-extend-native": "error",
+    "no-iterator": "error",
+    "no-labels": "error",
+    "no-with": "error",
+    "no-octal-escape": "error",
+    "no-buffer-constructor": "error",
+    "no-path-concat": "error",
+    "no-new-wrappers": "error",
+    "no-return-assign": "error",
+    "no-self-compare": "error",
+    "no-unsafe-optional-chaining": "error",
+    "no-prototype-builtins": "error",
+
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "LogicalExpression[operator='||'][left.object.object.name='process'][left.object.property.name='env'][left.property.name=/(SECRET|KEY|TOKEN|PASSWORD|PASSWD|CREDENTIAL|SALT|PRIVATE|CLIENT_ID)/][right.type='Literal']",
+        "message": "Hardcoded fallback for a credential environment variable. If the variable is unset the application silently authenticates against a public constant — see threat T3 in docs/threat-model.md. Fail fast instead of defaulting."
+      },
+      {
+        "selector": "LogicalExpression[operator='??'][left.object.object.name='process'][left.object.property.name='env'][left.property.name=/(SECRET|KEY|TOKEN|PASSWORD|PASSWD|CREDENTIAL|SALT|PRIVATE|CLIENT_ID)/][right.type='Literal']",
+        "message": "Hardcoded fallback for a credential environment variable. If the variable is unset the application silently authenticates against a public constant — see threat T3 in docs/threat-model.md. Fail fast instead of defaulting."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='crypto'][callee.property.name='createCipher']",
+        "message": "crypto.createCipher is deprecated and derives a key with no salt. Use crypto.createCipheriv, as utils/encryption.js already does."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='crypto'][callee.property.name='createDecipher']",
+        "message": "crypto.createDecipher is deprecated and derives a key with no salt. Use crypto.createDecipheriv, as utils/encryption.js already does."
+      },
+      {
+        "selector": "CallExpression[callee.object.property.name='env'][callee.property.name='exec']",
+        "message": "Avoid child_process.exec with interpolated input — it spawns a shell. Prefer execFile or spawn with an argument array."
+      }
+    ],
+
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-case-declarations": "warn",
+    "require-atomic-updates": "warn",
+    "no-empty": ["warn", { "allowEmptyCatch": true }],
+    "no-useless-escape": "warn",
+    "no-control-regex": "warn",
+    "no-console": "off"
+  }
+}
