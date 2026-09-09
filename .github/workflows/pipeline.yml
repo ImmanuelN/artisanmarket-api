@@ -1,0 +1,158 @@
+name: DevSecOps Pipeline
+
+# Implements the six-stage model from Chapter 4: Plan, Code, Build, Staging,
+# Deploy, Monitor. Required repository secrets (Settings > Secrets and
+# variables > Actions):
+#   SONAR_TOKEN, SONAR_HOST_URL  - SonarQube/SonarCloud (Code stage, SAST)
+#   SNYK_TOKEN                  - Snyk (Build stage, SCA) — optional; job
+#                                  degrades gracefully to `npm audit` if unset
+#   SESSION_SECRET               - real session secret for the Staging job
+#                                  (never the hardcoded fallback in app.js)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ---- Plan (4.3.1): manual gate, checked here as an artifact-presence check ----
+  plan-check:
+    name: "Plan · threat model present"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify a reviewed threat model exists
+        run: |
+          if [ ! -f docs/threat-model.md ]; then
+            echo "::error::No docs/threat-model.md found. Threat modelling (OWASP Threat Dragon) must be completed and signed off before this feature proceeds to Code (Section 4.3.1)."
+            exit 1
+          fi
+          echo "Threat model present: docs/threat-model.md"
+
+  # ---- Code (4.3.2, 4.3.3): SAST + secret scanning ----
+  code-security:
+    name: "Code · SAST + secret scanning"
+    needs: plan-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: ESLint (security ruleset)
+        run: npm run lint
+      - name: Gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: SonarQube (SAST)
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # ---- Build (4.3.4, 4.3.5, 4.3.6): SCA + container scanning + IaC scanning ----
+  build-security:
+    name: "Build · SCA + container + IaC scanning"
+    needs: plan-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Dependency audit (SCA baseline)
+        run: npm audit --audit-level=high
+
+      - name: Snyk (SCA)
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Build container image
+        run: docker build -t artisan-market:${{ github.sha }} .
+
+      - name: Trivy (container image scan)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "artisan-market:${{ github.sha }}"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Checkov (IaC scan — Kubernetes manifests)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: k8s
+          quiet: true
+          soft_fail: false
+
+      - name: Checkov (IaC scan — docker-compose)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          file: docker-compose.yml
+          quiet: true
+          soft_fail: false
+
+  # ---- Staging (4.3.7): DAST ----
+  staging-dast:
+    name: "Staging · DAST"
+    needs: [code-security, build-security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: node src/seed.js
+      - name: Start Artisan Market
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: |
+          nohup node src/server.js > server.log 2>&1 &
+          npx --yes wait-on http://localhost:3000 --timeout 30000
+      - name: OWASP ZAP baseline scan (DAST)
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: "http://localhost:3000"
+          fail_action: true
+
+  # ---- Deploy (4.3.8): release gate, no new tool ----
+  release-gate:
+    name: "Deploy · release gate"
+    needs: [plan-check, code-security, build-security, staging-dast]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All upstream gates passed — build ${{ github.sha }} is cleared for release."
+
+  # ---- Monitor (4.3.9): continuous compliance summary ----
+  monitor:
+    name: "Monitor · compliance summary"
+    needs: release-gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write compliance summary
+        run: |
+          {
+            echo "## Continuous compliance summary — ${{ github.sha }}";
+            echo "- Threat model (Plan): checked in plan-check";
+            echo "- SAST / secret scanning (Code): SonarQube, Gitleaks";
+            echo "- SCA / container / IaC (Build): npm audit, Snyk, Trivy, Checkov";
+            echo "- DAST (Staging): OWASP ZAP baseline";
+            echo "- PCI DSS / GDPR alignment (Section 8 assumption): manual review pending, not yet automated";
+          } >> "$GITHUB_STEP_SUMMARY"
