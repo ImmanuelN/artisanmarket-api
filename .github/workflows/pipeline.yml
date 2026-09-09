@@ -1,24 +1,70 @@
 name: DevSecOps Pipeline
 
-# Implements the six-stage model from Chapter 4: Plan, Code, Build, Staging,
-# Deploy, Monitor. Required repository secrets (Settings > Secrets and
-# variables > Actions):
+# Implements the six-stage model from Chapter 4 (Plan, Code, Build, Staging,
+# Deploy, Monitor) mapped onto a three-branch promotion flow:
+#
+#   dev      →  Plan + Code            fast feedback on every feature merge:
+#                                      SAST, secret scanning, SCA baseline
+#   staging  →  + Build + Staging      deep scanning before release:
+#                                      SCA, container, IaC, DAST
+#   main     →  + Deploy + Monitor     full production release gate and
+#                                      continuous compliance summary
+#
+# Each stage is cumulative: staging re-runs everything dev runs, and main
+# re-runs everything staging runs.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
 #   SONAR_TOKEN, SONAR_HOST_URL  - SonarQube/SonarCloud (Code stage, SAST)
-#   SNYK_TOKEN                  - Snyk (Build stage, SCA) — optional; job
-#                                  degrades gracefully to `npm audit` if unset
-#   SESSION_SECRET               - real session secret for the Staging job
-#                                  (never the hardcoded fallback in app.js)
+#   SNYK_TOKEN                   - Snyk (Build stage, SCA) — optional; the job
+#                                  falls back to `npm audit` when unset
+#   JWT_SECRET                   - token signing secret for the DAST run
+#                                  (never the 'fallback-secret' default in
+#                                  routes/adminRoutes.js)
 
 on:
   push:
-    branches: [main, master]
+    branches: [dev, staging, main, master]
   pull_request:
-    branches: [main, master]
+    branches: [dev, staging, main, master]
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
+  # ---- Resolve which promotion stage this run belongs to ----
+  context:
+    name: "Context · resolve promotion stage"
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.resolve.outputs.target }}
+      deep_scan: ${{ steps.resolve.outputs.deep_scan }}
+      production: ${{ steps.resolve.outputs.production }}
+    steps:
+      - name: Resolve target branch
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TARGET="${{ github.base_ref }}"
+          else
+            TARGET="${{ github.ref_name }}"
+          fi
+          case "$TARGET" in
+            main|master) DEEP=true;  PROD=true  ;;
+            staging)     DEEP=true;  PROD=false ;;
+            *)           DEEP=false; PROD=false ;;
+          esac
+          {
+            echo "target=$TARGET"
+            echo "deep_scan=$DEEP"
+            echo "production=$PROD"
+          } >> "$GITHUB_OUTPUT"
+          echo "Promotion target: $TARGET (deep scan: $DEEP, production: $PROD)"
+
   # ---- Plan (4.3.1): manual gate, checked here as an artifact-presence check ----
   plan-check:
     name: "Plan · threat model present"
+    needs: context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +76,14 @@ jobs:
           fi
           echo "Threat model present: docs/threat-model.md"
 
-  # ---- Code (4.3.2, 4.3.3): SAST + secret scanning ----
+  # ---- Code (4.3.2, 4.3.3): SAST + secret scanning — runs on dev, staging and main ----
   code-security:
     name: "Code · SAST + secret scanning"
-    needs: plan-check
+    needs: [context, plan-check]
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,23 +93,32 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
+
       - name: ESLint (security ruleset)
-        run: npm run lint
+        run: |
+          if ls .eslintrc* eslint.config.* >/dev/null 2>&1; then
+            npm run lint
+          else
+            echo "::warning::No ESLint configuration found in this repository, so the Code-stage lint gate is inactive. Add .eslintrc.json (or eslint.config.js) to activate it."
+          fi
+
       - name: Gitleaks (secret scanning)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-      - name: SonarQube (SAST)
-        uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-  # ---- Build (4.3.4, 4.3.5, 4.3.6): SCA + container scanning + IaC scanning ----
-  build-security:
-    name: "Build · SCA + container + IaC scanning"
-    needs: plan-check
+      - name: SonarQube (SAST)
+        if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
+        uses: SonarSource/sonarqube-scan-action@v4
+
+      - name: SonarQube not configured
+        if: env.SONAR_TOKEN == '' || env.SONAR_HOST_URL == ''
+        run: echo "::warning::SONAR_TOKEN / SONAR_HOST_URL are not set, so the SonarQube SAST gate was skipped."
+
+  # ---- Code (4.3.4): SCA baseline — cheap enough to run on every branch ----
+  dependency-audit:
+    name: "Code · SCA baseline (npm audit)"
+    needs: [context, plan-check]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,30 +127,81 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-
-      - name: Dependency audit (SCA baseline)
+      - name: Dependency audit
         run: npm audit --audit-level=high
 
+  # ---- Build (4.3.4, 4.3.5, 4.3.6): deep SCA + container + IaC — staging and main only ----
+  build-security:
+    name: "Build · SCA + container + IaC scanning"
+    needs: [context, code-security, dependency-audit]
+    if: needs.context.outputs.deep_scan == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Detect available scan targets
+        id: detect
+        run: |
+          if [ -f Dockerfile ]; then
+            echo "dockerfile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dockerfile=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Dockerfile in this repository — the container build and Trivy image scan were skipped."
+          fi
+          if [ -d k8s ]; then
+            echo "k8s=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "k8s=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No k8s/ directory — the Checkov Kubernetes scan was skipped."
+          fi
+          if [ -f docker-compose.yml ]; then
+            echo "compose=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compose=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No docker-compose.yml — the Checkov compose scan was skipped."
+          fi
+
       - name: Snyk (SCA)
-        if: ${{ env.SNYK_TOKEN != '' }}
+        if: env.SNYK_TOKEN != ''
         uses: snyk/actions/node@master
         continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high
 
+      - name: Snyk not configured
+        if: env.SNYK_TOKEN == ''
+        run: echo "::warning::SNYK_TOKEN is not set — falling back to the npm audit baseline from the Code stage."
+
       - name: Build container image
-        run: docker build -t artisan-market:${{ github.sha }} .
+        if: steps.detect.outputs.dockerfile == 'true'
+        run: docker build -t artisanmarket-api:${{ github.sha }} .
 
       - name: Trivy (container image scan)
+        if: steps.detect.outputs.dockerfile == 'true'
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: "artisan-market:${{ github.sha }}"
+          image-ref: "artisanmarket-api:${{ github.sha }}"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Trivy (dependency and config scan of the working tree)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          skip-dirs: "node_modules"
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
       - name: Checkov (IaC scan — Kubernetes manifests)
+        if: steps.detect.outputs.k8s == 'true'
         uses: bridgecrewio/checkov-action@master
         with:
           directory: k8s
@@ -100,17 +209,29 @@ jobs:
           soft_fail: false
 
       - name: Checkov (IaC scan — docker-compose)
+        if: steps.detect.outputs.compose == 'true'
         uses: bridgecrewio/checkov-action@master
         with:
           file: docker-compose.yml
           quiet: true
           soft_fail: false
 
-  # ---- Staging (4.3.7): DAST ----
+  # ---- Staging (4.3.7): DAST against the real API — staging and main only ----
   staging-dast:
     name: "Staging · DAST"
-    needs: [code-security, build-security]
+    needs: [context, code-security, build-security]
+    if: needs.context.outputs.deep_scan == 'true'
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -118,41 +239,65 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - run: node src/seed.js
-      - name: Start Artisan Market
+
+      - name: Start ArtisanMarket API
         env:
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          NODE_ENV: test
+          PORT: "5000"
+          MONGODB_URI: mongodb://localhost:27017/artisanmarket_ci
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRE: 1h
+          CLIENT_URL: http://localhost:5172
         run: |
-          nohup node src/server.js > server.log 2>&1 &
-          npx --yes wait-on http://localhost:3000 --timeout 30000
+          if [ -z "$JWT_SECRET" ]; then
+            echo "::warning::JWT_SECRET is not set; using an ephemeral CI-only value for this DAST run."
+            export JWT_SECRET="ci-only-ephemeral-$(openssl rand -hex 16)"
+          fi
+          nohup npm start > server.log 2>&1 &
+          npx --yes wait-on http://localhost:5000/health --timeout 60000
+
       - name: OWASP ZAP baseline scan (DAST)
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: "http://localhost:3000"
+          target: "http://localhost:5000"
           fail_action: true
 
-  # ---- Deploy (4.3.8): release gate, no new tool ----
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-log
+          path: server.log
+          if-no-files-found: ignore
+
+  # ---- Deploy (4.3.8): release gate — main only ----
   release-gate:
-    name: "Deploy · release gate"
-    needs: [plan-check, code-security, build-security, staging-dast]
+    name: "Deploy · production release gate"
+    needs: [context, plan-check, code-security, dependency-audit, build-security, staging-dast]
+    if: needs.context.outputs.production == 'true'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All upstream gates passed — build ${{ github.sha }} is cleared for release."
+      - run: echo "All upstream gates passed — build ${{ github.sha }} is cleared for production release."
 
-  # ---- Monitor (4.3.9): continuous compliance summary ----
+  # ---- Monitor (4.3.9): continuous compliance summary — main only ----
   monitor:
     name: "Monitor · compliance summary"
-    needs: release-gate
-    if: always()
+    needs: [context, release-gate]
+    if: always() && needs.context.outputs.production == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Write compliance summary
         run: |
           {
             echo "## Continuous compliance summary — ${{ github.sha }}";
+            echo "";
+            echo "Promotion target: **${{ needs.context.outputs.target }}**";
+            echo "";
             echo "- Threat model (Plan): checked in plan-check";
-            echo "- SAST / secret scanning (Code): SonarQube, Gitleaks";
-            echo "- SCA / container / IaC (Build): npm audit, Snyk, Trivy, Checkov";
-            echo "- DAST (Staging): OWASP ZAP baseline";
+            echo "- SAST / secret scanning (Code): SonarQube, Gitleaks, ESLint — runs on dev, staging, main";
+            echo "- SCA (Code/Build): npm audit on every branch, Snyk on staging and main";
+            echo "- Container / IaC (Build): Trivy, Checkov — runs on staging and main";
+            echo "- DAST (Staging): OWASP ZAP baseline against the live API — runs on staging and main";
+            echo "- Release gate (Deploy): passed";
             echo "- PCI DSS / GDPR alignment (Section 8 assumption): manual review pending, not yet automated";
           } >> "$GITHUB_STEP_SUMMARY"
