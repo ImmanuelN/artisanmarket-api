@@ -227,11 +227,6 @@ jobs:
         image: mongo:7
         ports:
           - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -239,6 +234,9 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
+
+      - name: Wait for MongoDB
+        run: npx --yes wait-on tcp:127.0.0.1:27017 --timeout 60000
 
       - name: Start ArtisanMarket API
         env:
