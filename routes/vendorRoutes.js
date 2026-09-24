@@ -3,6 +3,7 @@ import Vendor from '../models/Vendor.js'
 import User from '../models/User.js'
 import DeliveryProof from '../models/DeliveryProof.js'
 import jwt from 'jsonwebtoken'
+import { getJwtSecret } from '../config/secrets.js'
 
 const router = express.Router()
 
@@ -14,7 +15,7 @@ function requireAuth(req, res, next) {
   }
   const token = authHeader.replace('Bearer ', '')
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
+    const decoded = jwt.verify(token, getJwtSecret())
     req.user = decoded
     next()
   } catch (err) {

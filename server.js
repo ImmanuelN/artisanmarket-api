@@ -18,6 +18,7 @@ dotenv.config()
 
 // Import configurations AFTER loading env vars
 import connectDB from './config/database.js'
+import { assertRequiredSecrets } from './config/secrets.js'
 import { connectRedis } from './config/redis.js'
 
 // Import routes
@@ -41,6 +42,10 @@ import keepAliveService from './utils/keepAliveService.js'
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js'
 import { notFound } from './middleware/notFound.js'
+
+// Fail fast on missing secrets, before anything can serve a request on a
+// misconfigured process (threat T3 in docs/threat-model.md).
+assertRequiredSecrets(['JWT_SECRET'])
 
 // Connect to databases
 connectDB()
@@ -86,8 +91,8 @@ try {
     basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
     baseOptions: {
       headers: {
-        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID || 'test_client_id',
-        'PLAID-SECRET': process.env.PLAID_SECRET || 'test_secret',
+        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+        'PLAID-SECRET': process.env.PLAID_SECRET,
       },
     },
   })
@@ -131,13 +136,20 @@ console.log('📝 Credential Status:', process.env.STRIPE_SECRET_KEY && process.
 let stripeClient = null
 let stripeStatus = '❌ Failed'
 try {
-  stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
-    apiVersion: '2023-10-16',
-  })
-  console.log('✅ Stripe client initialized successfully')
-  
+  // No placeholder key: without STRIPE_SECRET_KEY the client stays null and
+  // Stripe features degrade, rather than the process carrying a fake credential
+  // that looks configured (threat T3).
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2023-10-16',
+    })
+    console.log('✅ Stripe client initialized successfully')
+  } else {
+    console.warn('⚠️  STRIPE_SECRET_KEY not set — Stripe features disabled.')
+  }
+
   // Test Stripe connection with a simple API call
-  if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'sk_test_placeholder') {
+  if (stripeClient) {
     try {
       // This is a lightweight test to verify credentials
       await stripeClient.paymentMethods.list({

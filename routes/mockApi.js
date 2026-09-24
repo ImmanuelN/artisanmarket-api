@@ -1,5 +1,6 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
+import { getJwtSecret } from '../config/secrets.js'
 import bcrypt from 'bcryptjs'
 
 const router = express.Router()
@@ -84,7 +85,7 @@ router.post('/login', async (req, res) => {
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'fallback-secret',
+      getJwtSecret(),
       { expiresIn: process.env.JWT_EXPIRE || '30d' }
     )
 
@@ -129,7 +130,7 @@ router.post('/register', async (req, res) => {
     // Generate JWT
     const token = jwt.sign(
       { userId: newUser.id, email: newUser.email, role: newUser.role },
-      process.env.JWT_SECRET || 'fallback-secret',
+      getJwtSecret(),
       { expiresIn: process.env.JWT_EXPIRE || '30d' }
     )
 
@@ -153,7 +154,7 @@ router.get('/me', (req, res) => {
       return res.status(401).json({ message: 'No token provided' })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
+    const decoded = jwt.verify(token, getJwtSecret())
     const user = users.find(u => u.id === decoded.userId)
     
     if (!user) {

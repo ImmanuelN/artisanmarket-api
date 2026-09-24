@@ -40,7 +40,7 @@ The pipeline in `.github/workflows/pipeline.yml` applies these controls cumulati
 |---|---|---|---|---|
 | T1 | Product / vendor query endpoints | Tampering | User-controlled query values reaching Mongoose filters can smuggle query operators (`$ne`, `$gt`, `$where`) and alter the filter — NoSQL injection | SAST gate (SonarQube) at Code stage; validate and cast with `express-validator` before building filters |
 | T2 | Review submission (`models/Review.js`) | Tampering / Elevation of Privilege | Review text is stored verbatim and served to the SPA; an unescaped render path would execute it as script for later visitors (stored XSS) | SAST + DAST gates (SonarQube, OWASP ZAP); sanitise on write, rely on React escaping on read |
-| T3 | Credential environment variables | Spoofing / Information Disclosure | Eleven call sites across six files fall back to a hardcoded literal when a credential variable is unset. `routes/adminRoutes.js:14` and `routes/vendorRoutes.js:17` both verify tokens with `process.env.JWT_SECRET \|\| 'fallback-secret'`, so an unset `JWT_SECRET` makes admin and vendor sessions forgeable against a public constant. `server.js:134` and `routes/paymentRoutes.js:10` fall back to `'sk_test_placeholder'` for Stripe; `server.js:89-90` and `routes/paymentRoutes.js:24-25` to `'test_client_id'` / `'test_secret'` for Plaid | ESLint `no-restricted-syntax` rule in `.eslintrc.json` blocks the pattern at the Code stage, plus the Gitleaks gate; **open finding — the Code stage fails on this until remediated.** Remove each fallback and fail fast when the variable is absent |
+| T3 | Credential environment variables | Spoofing / Information Disclosure | Eleven call sites across six files fell back to a hardcoded literal when a credential variable was unset. `routes/adminRoutes.js`, `routes/vendorRoutes.js` and `routes/mockApi.js` (×3) verified tokens with `process.env.JWT_SECRET \|\| 'fallback-secret'`, so an unset `JWT_SECRET` made admin and vendor sessions forgeable against a public constant. `server.js` and `routes/paymentRoutes.js` fell back to `'sk_test_placeholder'` (Stripe) and `'test_client_id'` / `'test_secret'` (Plaid) | **Remediated.** All five JWT sites now call `getJwtSecret()` from `config/secrets.js`, which throws when the variable is absent, and `assertRequiredSecrets()` fails the process at startup. Stripe and Plaid clients are constructed only when their credentials exist, degrading to a disabled state instead of carrying a fake credential. The ESLint `no-restricted-syntax` rule in `.eslintrc.json` keeps the pattern out at the Code stage |
 | T4 | Login / register | Spoofing | Credential stuffing or brute force against `/api/auth` | **Mitigated** — `express-rate-limit` at `server.js:189` caps each IP at 100 requests per 15 min across `/api/`. Consider a stricter per-route limit on auth endpoints |
 | T5 | Third-party packages | Tampering | A direct or transitive dependency could ship a known vulnerability | SCA gates: `npm audit` on every branch, Snyk at Build stage (staging and main) |
 | T6 | Container image | Tampering | Base image or OS packages could carry known CVEs | Container scan (Trivy) at Build stage — **inactive**, no `Dockerfile` in the repository yet |
@@ -49,12 +49,21 @@ The pipeline in `.github/workflows/pipeline.yml` applies these controls cumulati
 | T9 | Payments (Stripe, Plaid) | Repudiation / Tampering | Stripe webhooks mutate order and balance state; a forged webhook could mark orders paid | Raw-body handler at `server.js:247` preserves the signature payload; `STRIPE_WEBHOOK_SECRET` must be verified on every webhook — confirm during Code review |
 | T10 | Media upload (`routes/uploadRoutes.js`) | Denial of Service / Tampering | Multer accepts up to 10 MB; unrestricted type or volume could exhaust storage or serve hostile files | Enforce MIME allow-listing and per-user quotas; DAST gate exercises the endpoint |
 
-T3 is the live "before" case for Chapter 5: eleven real hardcoded credential
-fallbacks in the current codebase, detected by the Code-stage ESLint security
-ruleset (`.eslintrc.json`). Running `npm run lint` reproduces the full list, which
-is the measured "before" figure for the remediation chapter. T6 and T7 are staged
-controls — the pipeline steps exist and self-activate as soon as the container and
-IaC artifacts land.
+T3 was the measured "before" figure for the remediation chapter: eleven real
+hardcoded credential fallbacks, found by the Code-stage ESLint security ruleset
+(`.eslintrc.json`) and since remediated, taking the Code stage from eleven blocking
+findings to zero. These were pre-existing technical debt in the application, not
+seeded test cases. T6 and T7 are staged controls — the pipeline steps exist and
+self-activate as soon as the container and IaC artifacts land.
+
+### Gate status
+
+The dependency-scanning gates (`npm audit`, Trivy filesystem scan) are currently
+marked `continue-on-error` in `.github/workflows/pipeline.yml`, tagged
+`DEMO-GATE-RELAXED`, so that pre-existing dependency debt (21 critical/high
+advisories, three needing semver-major upgrades) cannot mask whether the pipeline
+mechanism executes end to end. **They must be restored to blocking before this
+pipeline is used as evidence of vulnerability detection.**
 
 ### Code-stage ruleset
 
