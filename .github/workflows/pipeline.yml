@@ -258,12 +258,26 @@ jobs:
           JWT_EXPIRE: 1h
           CLIENT_URL: http://localhost:5172
         run: |
+          # Ephemeral, CI-only values for secrets the app refuses to start
+          # without. Generated per run and never reused outside this job.
           if [ -z "$JWT_SECRET" ]; then
             echo "::warning::JWT_SECRET is not set; using an ephemeral CI-only value for this DAST run."
             export JWT_SECRET="ci-only-ephemeral-$(openssl rand -hex 16)"
           fi
+          # utils/encryption.js exits unless this is exactly 64 hex characters.
+          export BANK_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
           nohup npm start > server.log 2>&1 &
-          npx --yes wait-on http://localhost:5000/health --timeout 60000
+          APP_PID=$!
+          if ! npx --yes wait-on http://localhost:5000/health --timeout 60000; then
+            echo "::error::The API did not become healthy. Startup log follows."
+            echo "----- server.log -----"
+            cat server.log || true
+            echo "----------------------"
+            kill "$APP_PID" 2>/dev/null || true
+            exit 1
+          fi
+          echo "API healthy on http://localhost:5000"
 
       - name: OWASP ZAP baseline scan (DAST)
         uses: zaproxy/action-baseline@v0.12.0
