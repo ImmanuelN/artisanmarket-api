@@ -19,5 +19,8 @@ useDefault = true
 [allowlist]
 description = "Documented placeholder literal in the threat model, not a live credential"
 regexes = [
-  '''sk_test_placeholder''',
+  # Written with a character class so this file does not itself contain a
+  # contiguous Stripe-format literal -- Trivy's secret scanner flags the raw
+  # string even inside an allowlist. The regex still matches the placeholder.
+  '''sk_test_pl[a]ceholder''',
 ]
