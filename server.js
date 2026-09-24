@@ -187,10 +187,16 @@ const io = new Server(server, {
 })
 
 // Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false, // Allow for development
-  crossOriginEmbedderPolicy: false
-}))
+// SEED-DAST-01: security response headers deliberately disabled.
+// Controlled seeded case for Chapter 5. Removing helmet strips
+// X-Content-Type-Options, X-Frame-Options and related headers from every
+// response, which only a running-application scan can observe -- SAST and
+// secret scanning cannot see it. Expected to be caught by the Staging-stage
+// OWASP ZAP baseline.
+// app.use(helmet({
+//   contentSecurityPolicy: false, // Allow for development
+//   crossOriginEmbedderPolicy: false
+// }))
 
 // Rate limiting
 const limiter = rateLimit({
