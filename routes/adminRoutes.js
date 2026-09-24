@@ -12,7 +12,9 @@ function requireAdminAuth(req, res, next) {
   }
   const token = authHeader.replace('Bearer ', '')
   try {
-    const decoded = jwt.verify(token, getJwtSecret())
+    // SEED-SAST-01: deliberately reintroduced credential fallback (threat T3).
+    // Expected to be caught by the Code-stage ESLint security ruleset.
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
     if (decoded.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin access required' })
     }
