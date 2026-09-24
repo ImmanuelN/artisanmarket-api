@@ -21,6 +21,7 @@ depends on a pre-existing failure.
 | SEED-SAST-01 | `seed/sast-01` | [#3](https://github.com/ImmanuelN/artisanmarket-api/pull/3) | 1 file, +3 / −1 |
 | SEED-SECRET-01 | `seed/secret-01` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) | 1 file, +15 |
 | SEED-DAST-01 | `seed/dast-01` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) | 1 file, +10 / −4 |
+| SEED-SCA-01 | `seed/sca-01` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) | 2 files (manifest + lockfile only) |
 
 ## Results
 
@@ -29,6 +30,7 @@ depends on a pre-existing failure.
 | SEED-SAST-01 | `process.env.JWT_SECRET \|\| '<literal>'` in the admin token path | ESLint security ruleset (`no-restricted-syntax`) | Code | **detected** |
 | SEED-SECRET-01 | High-entropy secret committed as a standalone assignment | Gitleaks | Code | **detected** |
 | SEED-DAST-01 | `helmet` middleware disabled | OWASP ZAP baseline | Staging | **detected** |
+| SEED-SCA-01 | `multer` downgraded to a version with 10 HIGH CVEs | Trivy filesystem scan | Build | **detected** |
 
 Every case failed the pipeline at its intended gate, and no case failed anywhere
 else.
@@ -56,6 +58,7 @@ in full and only the running-application scan observes it.
 | SEED-SAST-01 | pass | **fail** | skipped | skipped |
 | SEED-SECRET-01 | pass | **fail** | skipped | skipped |
 | SEED-DAST-01 | pass | pass | pass | **fail** |
+| SEED-SCA-01 | pass | pass | **fail** | skipped |
 
 ## SEED-DAST-01 — measured delta
 
@@ -94,15 +97,42 @@ Two consequences worth reporting:
    partner-match — generic high-entropy secrets, which is what the final
    SEED-SECRET-01 uses.
 
+## SEED-SCA-01 — the tools are complementary, not redundant
+
+This case isolates the Build stage and, in doing so, measures something the other
+three cannot: the two SCA tools disagree.
+
+`multer` was downgraded from `2.4.0` to `1.4.5-lts.1`, which carries ten HIGH
+denial-of-service CVEs (`CVE-2025-47935`, `-47944`, `-48997`, `CVE-2025-7338`,
+`CVE-2026-2359`, `-3304`, `-3520`, `-5079`, `-77078`, `-82333`). Only the manifest
+and lockfile change; the single `multer({ storage: memoryStorage() })` call site
+behaves identically on both versions.
+
+| Tool | Database | Result on the same commit |
+|---|---|---|
+| `npm audit --audit-level=high` | GitHub Advisory DB | **PASS** — `multer` not listed at all |
+| Trivy filesystem scan | NVD | **FAIL** — `Total: 10 (HIGH: 10, CRITICAL: 0)` |
+
+In this case the gate that **passes** is as significant as the gate that fails. A
+Build stage running only `npm audit` would ship ten HIGH CVEs in the file-upload
+path.
+
+This is not a constructed scenario. `multer@1.4.5-lts` was a real dependency of
+this application and sat in `main` while `npm audit` reported the tree clean; it
+was caught only when the dependency gates were restored from `continue-on-error`
+to blocking, and only by Trivy. The seeded case reproduces that on demand.
+
+Two conclusions follow for Chapter 5:
+
+1. Defence in depth applies *within* a stage, not only across stages. Two SCA
+   tools drawing on different vulnerability databases are not duplicated effort.
+2. A relaxed gate does not merely delay detection — while `npm audit` and Trivy
+   were both advisory, neither finding surfaced as a failure, and the vulnerable
+   dependency reached `main`.
+
 ## Scope limit
 
-No seeded case covers the **SCA** gate. `npm audit` and the Trivy filesystem scan
-are currently `continue-on-error` (tagged `DEMO-GATE-RELAXED`), so a seeded
-vulnerable dependency would be reported but would not fail the pipeline.
-Evidencing that gate requires restoring both to blocking, which in turn requires
-clearing or formally accepting the 21 pre-existing critical/high advisories —
-three of which need semver-major upgrades.
-
-Neither does any case cover SonarQube, which is skipped while `SONAR_TOKEN` and
+Every gate that is active in this repository now has a seeded case. No case
+covers SonarQube, which is skipped while `SONAR_TOKEN` and
 `SONAR_HOST_URL` are unset, or Checkov, which is inactive until Kubernetes or
 compose manifests exist.
