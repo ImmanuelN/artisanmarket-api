@@ -17,9 +17,9 @@ name: DevSecOps Pipeline
 #   SONAR_TOKEN, SONAR_HOST_URL  - SonarQube/SonarCloud (Code stage, SAST)
 #   SNYK_TOKEN                   - Snyk (Build stage, SCA) — optional; the job
 #                                  falls back to `npm audit` when unset
-#   JWT_SECRET                   - token signing secret for the DAST run
-#                                  (never the 'fallback-secret' default in
-#                                  routes/adminRoutes.js)
+#   JWT_SECRET                   - token signing secret for the DAST run. The
+#                                  app now refuses to start without it
+#                                  (config/secrets.js), so it has no default.
 
 on:
   push:
@@ -194,7 +194,7 @@ jobs:
 
       - name: Trivy (container image scan)
         if: steps.detect.outputs.dockerfile == 'true'
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "artisanmarket-api:${{ github.sha }}"
           severity: "CRITICAL,HIGH"
@@ -203,7 +203,7 @@ jobs:
       # DEMO-GATE-RELAXED: see the Dependency audit note above.
       - name: Trivy (dependency and config scan of the working tree)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "fs"
           scan-ref: "."
