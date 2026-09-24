@@ -1,0 +1,13 @@
+# OWASP ZAP baseline rule configuration — ArtisanMarket API (Staging stage, 4.3.7)
+#
+# Format: <rule id>\t<IGNORE|WARN|FAIL>\t<justification>
+#
+# The DAST target is the Express API on http://localhost:5000. The baseline
+# spider reaches the unauthenticated surface: /health, /ping and the API error
+# responses. Authenticated routes are out of scope for a baseline scan.
+#
+# Everything not listed here stays at its default severity, so any genuine
+# application-layer finding (injection, XSS, disclosure, auth bypass) still
+# fails the gate.
+
+10049	IGNORE	Storable/cacheable content — only /health and /ping are reachable unauthenticated, and both are public status endpoints with no sensitive payload

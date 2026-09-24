@@ -6,14 +6,15 @@ import { requireAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
-  apiVersion: '2023-10-16',
-});
+// Initialize Stripe. No placeholder key — an unset STRIPE_SECRET_KEY leaves the
+// client null so payment routes fail explicitly, rather than the process running
+// on a fake credential that looks configured (threat T3).
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' })
+  : null;
 
-// Check if Stripe credentials are properly configured
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.warn('⚠️  Stripe secret key not found. Using test key. Please set STRIPE_SECRET_KEY environment variable.');
+if (!stripe) {
+  console.warn('⚠️  STRIPE_SECRET_KEY not set. Stripe payment routes are disabled.');
 }
 
 // Initialize Plaid
@@ -21,8 +22,8 @@ const plaidConfig = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
   baseOptions: {
     headers: {
-      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID || 'test_client_id',
-      'PLAID-SECRET': process.env.PLAID_SECRET || 'test_secret',
+      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+      'PLAID-SECRET': process.env.PLAID_SECRET,
     },
   },
 });

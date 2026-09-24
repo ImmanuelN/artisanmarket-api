@@ -1,5 +1,6 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
+import { getJwtSecret } from '../config/secrets.js'
 
 const router = express.Router()
 
@@ -11,7 +12,7 @@ function requireAdminAuth(req, res, next) {
   }
   const token = authHeader.replace('Bearer ', '')
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
+    const decoded = jwt.verify(token, getJwtSecret())
     if (decoded.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin access required' })
     }
