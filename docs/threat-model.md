@@ -58,24 +58,20 @@ self-activate as soon as the container and IaC artifacts land.
 
 ### Gate status
 
-The dependency-scanning gates (`npm audit`, Trivy filesystem scan) are currently
-marked `continue-on-error` in `.github/workflows/pipeline.yml`, tagged
-`DEMO-GATE-RELAXED`, so that pre-existing dependency debt (21 critical/high
-advisories, three needing semver-major upgrades) cannot mask whether the pipeline
-mechanism executes end to end. **They must be restored to blocking before this
-pipeline is used as evidence of vulnerability detection.**
+All gates are blocking. The dependency-scanning gates were restored after the
+tree was cleared: `npm audit fix` resolved the non-breaking advisories, and
+`cloudinary` and `nodemailer` were **removed outright** — neither was imported
+or required anywhere in the codebase, and between them they carried both
+remaining high-severity advisories. You do not upgrade what you do not use.
 
-### Code-stage ruleset
+| | Before | After |
+|---|---|---|
+| critical | 1 | 0 |
+| high | 20 | 0 |
+| moderate | 10 | 2 |
+| low | 3 | 0 |
+| **total** | **34** | **2** |
 
-`.eslintrc.json` is scoped so that a red Code stage always means a security finding:
-security rules are errors, while stylistic and correctness noise is downgraded to
-warnings. Alongside T3 it blocks `eval`/`Function` construction, `javascript:` URLs,
-prototype tampering, and the deprecated `crypto.createCipher`/`createDecipher`
-(superseded by the `createCipheriv` usage already in `utils/encryption.js`).
-
-## Sign-off
-
-Reviewed and approved to proceed to the Code stage.
-
-- **Reviewer:** _[supervisor / lead developer name]_
-- **Date:** _[sign-off date]_
+The two remaining moderates are `imagekit` (used by `routes/uploadRoutes.js`) and
+its transitive `uuid`. Both sit below the `--audit-level=high` threshold. Fixing
+them needs a semver-major `imagekit` bump, tracked as remediation work.
