@@ -1,0 +1,23 @@
+# Gitleaks configuration — ArtisanMarket API (Code stage, 4.3.3)
+#
+# The default rule set is kept in full; this file only records one narrowly
+# scoped exception.
+#
+# Why it exists: on a pull_request event Gitleaks scans every commit in the PR
+# range, not just the head commit. docs/threat-model.md documents threat T3 by
+# naming the placeholder literal that the remediated code used to fall back to.
+# That literal matches the `stripe-access-token` rule, so it fires from the
+# intermediate commits even though the current tree no longer contains it.
+#
+# The exception is deliberately the exact placeholder string rather than the
+# file or the rule: a real Stripe key committed to this repository — including
+# to that same file — is still detected and still fails the Code stage.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholder literal in the threat model, not a live credential"
+regexes = [
+  '''sk_test_placeholder''',
+]
