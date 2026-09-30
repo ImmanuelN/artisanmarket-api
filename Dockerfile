@@ -19,7 +19,7 @@ COPY package.json package-lock.json ./
 
 # npm ci honours the lockfile exactly, which keeps the image reproducible and
 # keeps what Trivy scans identical to what the SCA gate scanned.
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # ---------- runtime ----------
 FROM node:20-alpine AS runtime

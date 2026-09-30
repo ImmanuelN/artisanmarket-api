@@ -27,9 +27,10 @@ on:
   pull_request:
     branches: [dev, staging, main, master]
 
+# Least privilege at workflow level; security-events: write is granted only to
+# the job that uploads SARIF (S8233).
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   # ---- Resolve which promotion stage this run belongs to ----
@@ -67,7 +68,7 @@ jobs:
     needs: context
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify a reviewed threat model exists
         run: |
           if [ ! -f docs/threat-model.md ]; then
@@ -79,20 +80,23 @@ jobs:
   # ---- Code (4.3.2, 4.3.3): SAST + secret scanning — runs on dev, staging and main ----
   code-security:
     name: "Code · SAST + secret scanning"
+    permissions:
+      contents: read
+      security-events: write
     needs: [context, plan-check]
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: ESLint (security ruleset)
         run: |
@@ -107,13 +111,13 @@ jobs:
       # failure would silently suppress secret scanning and SAST.
       - name: Gitleaks (secret scanning)
         if: '!cancelled()'
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarQube (SAST)
         if: '!cancelled() && env.SONAR_TOKEN != '''' && env.SONAR_HOST_URL != '''''
-        uses: SonarSource/sonarqube-scan-action@v8.2.2
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
 
       - name: SonarQube not configured
         if: '!cancelled() && (env.SONAR_TOKEN == '''' || env.SONAR_HOST_URL == '''')'
@@ -125,12 +129,12 @@ jobs:
     needs: [context, plan-check]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # Blocking. The dependency tree carries no critical or high advisories:
       # npm audit fix cleared the non-breaking ones, and cloudinary and
       # nodemailer were removed outright as unused dependencies. Two moderate
@@ -148,12 +152,12 @@ jobs:
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Detect available scan targets
         id: detect
@@ -179,7 +183,7 @@ jobs:
 
       - name: Snyk (SCA)
         if: env.SNYK_TOKEN != ''
-        uses: snyk/actions/node@master
+        uses: snyk/actions/node@b075801f26076be9bb50521154cafab73f44da0c # master
         continue-on-error: true
         with:
           args: --severity-threshold=high
@@ -194,7 +198,7 @@ jobs:
 
       - name: Trivy (container image scan)
         if: "!cancelled() && steps.detect.outputs.dockerfile == 'true'"
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: "artisanmarket-api:${{ github.sha }}"
           severity: "CRITICAL,HIGH"
@@ -202,7 +206,7 @@ jobs:
 
       - name: Trivy (dependency and config scan of the working tree)
         if: '!cancelled()'
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -212,7 +216,7 @@ jobs:
 
       - name: Checkov (IaC scan — Kubernetes manifests)
         if: "!cancelled() && steps.detect.outputs.k8s == 'true'"
-        uses: bridgecrewio/checkov-action@v12.3126.0
+        uses: bridgecrewio/checkov-action@5798bad4f6dd9c1fb67ae3ec10d42d8fb67037c4 # v12.3126.0
         with:
           directory: k8s
           quiet: true
@@ -220,7 +224,7 @@ jobs:
 
       - name: Checkov (IaC scan — docker-compose)
         if: "!cancelled() && steps.detect.outputs.compose == 'true'"
-        uses: bridgecrewio/checkov-action@v12.3126.0
+        uses: bridgecrewio/checkov-action@5798bad4f6dd9c1fb67ae3ec10d42d8fb67037c4 # v12.3126.0
         with:
           file: docker-compose.yml
           quiet: true
@@ -238,15 +242,15 @@ jobs:
         ports:
           - 27017:27017
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Wait for MongoDB
-        run: npx --yes wait-on tcp:127.0.0.1:27017 --timeout 60000
+        run: npx --yes --ignore-scripts wait-on@8.0.1 tcp:127.0.0.1:27017 --timeout 60000
 
       - name: Start ArtisanMarket API
         env:
@@ -268,7 +272,7 @@ jobs:
 
           nohup npm start > server.log 2>&1 &
           APP_PID=$!
-          if ! npx --yes wait-on http://localhost:5000/health --timeout 60000; then
+          if ! npx --yes --ignore-scripts wait-on@8.0.1 http://localhost:5000/health --timeout 60000; then
             echo "::error::The API did not become healthy. Startup log follows."
             echo "----- server.log -----"
             cat server.log || true
@@ -279,7 +283,7 @@ jobs:
           echo "API healthy on http://localhost:5000"
 
       - name: OWASP ZAP baseline scan (DAST)
-        uses: zaproxy/action-baseline@v0.15.0
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: "http://localhost:5000"
           # Baseline-scope exclusions with per-rule justification.
@@ -289,7 +293,7 @@ jobs:
 
       - name: Upload server log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: api-server-log
           path: server.log

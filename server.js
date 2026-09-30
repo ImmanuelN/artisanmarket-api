@@ -36,7 +36,6 @@ import vendorBalanceRoutes from './routes/vendorBalanceRoutes.js'
 import customerBalanceRoutes from './routes/customerBalanceRoutes.js'
 import customerRoutes from './routes/customerRoutes.js'
 import deliveryProofRoutes from './routes/deliveryProofRoutes.js'
-import mockApiRoutes from './routes/mockApi.js'
 import keepAliveService from './utils/keepAliveService.js'
 
 // Import middleware
