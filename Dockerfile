@@ -26,7 +26,19 @@ FROM node:20-alpine AS runtime
 
 # dumb-init gives PID 1 correct signal handling, so SIGTERM reaches the app and
 # the existing graceful-shutdown handlers in config/database.js actually run.
-RUN apk add --no-cache dumb-init
+#
+# libcrypto3/libssl3 are upgraded explicitly: the pinned base still carries
+# openssl 3.5.6-r0, which Trivy flags for CVE-2026-14456 (DoS) and
+# CVE-2026-45447 (heap use-after-free), both fixed in 3.5.8-r0. Patching here
+# rather than waiting for a rebuilt base image.
+RUN apk add --no-cache dumb-init \
+    && apk add --no-cache --upgrade libcrypto3 libssl3
+
+# Run as a high UID (>10000) so the container user cannot collide with a real
+# user on the host (CKV_K8S_40). The base image's `node` user is uid 1000, which
+# is inside the range a host is likely to assign.
+RUN addgroup -g 10001 -S app \
+    && adduser -u 10001 -S app -G app
 
 ENV NODE_ENV=production \
     PORT=5000 \
@@ -47,19 +59,18 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
     /usr/local/bin/yarn \
     /usr/local/bin/yarnpkg
 
-# node:alpine ships an unprivileged `node` user (uid/gid 1000). Use it rather
-# than creating another, and own the app directory so a read-only root
-# filesystem is still viable.
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
-COPY --chown=node:node package.json package-lock.json ./
-COPY --chown=node:node server.js ./
-COPY --chown=node:node config ./config
-COPY --chown=node:node middleware ./middleware
-COPY --chown=node:node models ./models
-COPY --chown=node:node routes ./routes
-COPY --chown=node:node utils ./utils
+# Files are owned by the high-UID app user so a read-only root filesystem is
+# still viable and nothing needs to be writable at runtime except /tmp.
+COPY --chown=10001:10001 --from=deps /app/node_modules ./node_modules
+COPY --chown=10001:10001 package.json package-lock.json ./
+COPY --chown=10001:10001 server.js ./
+COPY --chown=10001:10001 config ./config
+COPY --chown=10001:10001 middleware ./middleware
+COPY --chown=10001:10001 models ./models
+COPY --chown=10001:10001 routes ./routes
+COPY --chown=10001:10001 utils ./utils
 
-USER node
+USER 10001
 
 EXPOSE 5000
 

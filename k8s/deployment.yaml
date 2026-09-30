@@ -7,6 +7,27 @@ metadata:
     app.kubernetes.io/name: artisanmarket-api
     app.kubernetes.io/part-of: artisanmarket
     app.kubernetes.io/component: api
+  annotations:
+    # Documented exceptions, in the same style as the ESLint and ZAP exceptions
+    # elsewhere in this project: recorded in-band with a reason, not suppressed.
+    #
+    # CKV_K8S_43 — the image digest is not knowable when this manifest is
+    # written; it exists only after the Build stage produces the image. The
+    # Deploy stage substitutes tag for digest at apply time. Committing a
+    # placeholder digest would be worse than a pinned tag, because a stale
+    # digest silently deploys a different image than the one scanned.
+    checkov.io/skip1: CKV_K8S_43=Digest substituted by the Deploy stage; a committed placeholder digest would deploy a different image than was scanned
+    #
+    # CKV_K8S_35 — a real control gap, accepted rather than dismissed. The
+    # application reads secrets from the environment (config/secrets.js), so
+    # switching to file-mounted secrets requires changing its secret-loading
+    # contract, which the Staging DAST job also depends on. Compensating
+    # controls: the Secret is never committed (see k8s/README.md), the service
+    # account token is not mounted, the namespace enforces the restricted Pod
+    # Security Standard, and a missing secret fails the process closed rather
+    # than running degraded. Remediation path: support <NAME>_FILE in
+    # config/secrets.js and mount the Secret as a volume.
+    checkov.io/skip2: CKV_K8S_35=App reads secrets from env by design; tracked for migration to file-mounted secrets
 spec:
   replicas: 2
   revisionHistoryLimit: 3
@@ -29,9 +50,11 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        # High UID (>10000) so the container user cannot collide with a real
+        # host user (CKV_K8S_40). Matches the `app` user in the image.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -49,7 +72,7 @@ spec:
             privileged: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: 10001
             capabilities:
               drop:
                 - ALL
