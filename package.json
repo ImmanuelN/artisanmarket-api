@@ -9,10 +9,11 @@
     "dev": "nodemon server.js",
     "monitor": "node monitor-server.js",
     "dev:monitor": "concurrently \"npm run dev\" \"npm run monitor\"",
-    "test": "jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "lint": "eslint . --ext .js,.mjs",
     "build": "echo 'No build step required for Node.js'",
-    "postinstall": "echo 'Server dependencies installed successfully'"
+    "postinstall": "echo 'Server dependencies installed successfully'",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

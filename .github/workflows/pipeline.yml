@@ -109,6 +109,13 @@ jobs:
       # Every Code-stage scanner reports on every run. Without !cancelled() a
       # single failing scanner short-circuits the rest of the job, so a lint
       # failure would silently suppress secret scanning and SAST.
+      # Tests run before SonarQube so the lcov report exists when the scanner
+      # uploads. Without coverage data the quality gate fails on new_coverage
+      # no matter how much is actually tested.
+      - name: Unit tests with coverage
+        if: '!cancelled()'
+        run: npm run test:coverage
+
       - name: Gitleaks (secret scanning)
         if: '!cancelled()'
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2

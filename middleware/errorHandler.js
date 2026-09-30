@@ -1,16 +1,28 @@
 import crypto from 'node:crypto'
 import { forLog } from '../utils/sanitize.js'
 
-/** Request fields that must never reach a log. */
-const REDACTED_HEADERS = ['authorization', 'cookie', 'x-api-key', 'stripe-signature']
-const REDACTED_BODY_FIELDS = ['password', 'token', 'secret', 'accountNumber', 'cvv', 'cardNumber']
+/**
+ * Request fields that must never reach a log.
+ *
+ * Matched as lowercase substrings, not exact keys. An earlier version compared
+ * whole keys against a camelCase list, so `cardNumber` lowercased to
+ * `cardnumber` and never matched — card and account numbers were logged in
+ * full. Substring matching also covers the variants a codebase accumulates:
+ * accessToken, refresh_token, apiSecret.
+ */
+const REDACTED_HEADER_MARKERS = ['authorization', 'cookie', 'api-key', 'signature', 'token']
+const REDACTED_BODY_MARKERS = [
+  'password', 'passwd', 'token', 'secret', 'accountnumber',
+  'cvv', 'cardnumber', 'pin', 'ssn', 'routingnumber'
+]
 
-/** Copy an object, replacing sensitive keys with a marker. */
-const redact = (source, keys) => {
+/** Copy an object, replacing any key matching a sensitive marker. */
+const redact = (source, markers) => {
   if (!source || typeof source !== 'object') return source
   const out = {}
   for (const [k, v] of Object.entries(source)) {
-    out[k] = keys.includes(k.toLowerCase()) ? '[REDACTED]' : v
+    const key = k.toLowerCase()
+    out[k] = markers.some((marker) => key.includes(marker)) ? '[REDACTED]' : v
   }
   return out
 }
@@ -32,8 +44,8 @@ export const errorHandler = (err, req, res, next) => {
   // Headers and body are redacted before logging: these previously wrote the
   // Authorization header and raw request bodies -- including passwords and card
   // details -- straight to the log.
-  console.error(`💥 [${reqId}] Request headers:`, forLog(redact(req.headers, REDACTED_HEADERS)))
-  console.error(`💥 [${reqId}] Request body:`, forLog(redact(req.body, REDACTED_BODY_FIELDS)))
+  console.error(`💥 [${reqId}] Request headers:`, forLog(redact(req.headers, REDACTED_HEADER_MARKERS)))
+  console.error(`💥 [${reqId}] Request body:`, forLog(redact(req.body, REDACTED_BODY_MARKERS)))
 
   // Default error
   let error = { ...err }
