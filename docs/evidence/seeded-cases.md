@@ -132,7 +132,20 @@ Two conclusions follow for Chapter 5:
 
 ## Scope limit
 
-Every gate that is active in this repository now has a seeded case. No case
-covers SonarQube, which is skipped while `SONAR_TOKEN` and
-`SONAR_HOST_URL` are unset, or Checkov, which is inactive until Kubernetes or
-compose manifests exist.
+Four of the six active gates have a seeded case. Two do not:
+
+**Checkov** and the **Trivy image scan** became active on 2026-09-30, when the
+`Dockerfile` and `k8s/` manifests were added — before that both self-skipped for
+want of anything to scan. Their detection capability is currently evidenced only
+*incidentally*: Checkov's first genuine run reported 86 passed / 4 failed against
+the new manifests, and the first image scan reported 26 findings including a
+CRITICAL. Those are real detections, but they are not isolated cases — the commit
+that introduced them changed many things at once, so neither can be cited the way
+SEED-SAST-01 through SEED-SCA-01 can. A fifth seeded case isolating Checkov (one
+deliberate manifest misconfiguration, one commit off green) is the outstanding
+work here.
+
+**SonarQube** is skipped entirely while `SONAR_TOKEN` and `SONAR_HOST_URL` are
+unset. It has never executed, so nothing about it is evidenced — not detection,
+not even configuration validity. This is blocked on account provisioning, not on
+pipeline work, and must not be simulated.
