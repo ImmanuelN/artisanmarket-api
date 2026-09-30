@@ -34,6 +34,19 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+# Remove npm from the runtime image. Dependencies are installed in the deps
+# stage and the entrypoint is `node server.js`, so npm is never invoked here —
+# but the base image bundles it along with its own dependency tree (pacote,
+# sigstore, tar, cross-spawn, glob, minimatch, ip-address, brace-expansion),
+# which accounted for 22 of the image's Trivy findings including the only
+# CRITICAL. Deleting unused tooling is the fix; suppressing the findings is not.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /opt/yarn-* \
+    /usr/local/bin/yarn \
+    /usr/local/bin/yarnpkg
+
 # node:alpine ships an unprivileged `node` user (uid/gid 1000). Use it rather
 # than creating another, and own the app directory so a read-only root
 # filesystem is still viable.

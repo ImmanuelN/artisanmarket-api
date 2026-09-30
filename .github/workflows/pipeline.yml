@@ -193,7 +193,7 @@ jobs:
         run: docker build -t artisanmarket-api:${{ github.sha }} .
 
       - name: Trivy (container image scan)
-        if: steps.detect.outputs.dockerfile == 'true'
+        if: "!cancelled() && steps.detect.outputs.dockerfile == 'true'"
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "artisanmarket-api:${{ github.sha }}"
@@ -201,6 +201,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy (dependency and config scan of the working tree)
+        if: '!cancelled()'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "fs"
@@ -210,7 +211,7 @@ jobs:
           exit-code: "1"
 
       - name: Checkov (IaC scan — Kubernetes manifests)
-        if: steps.detect.outputs.k8s == 'true'
+        if: "!cancelled() && steps.detect.outputs.k8s == 'true'"
         uses: bridgecrewio/checkov-action@v12.3126.0
         with:
           directory: k8s
@@ -218,7 +219,7 @@ jobs:
           soft_fail: false
 
       - name: Checkov (IaC scan — docker-compose)
-        if: steps.detect.outputs.compose == 'true'
+        if: "!cancelled() && steps.detect.outputs.compose == 'true'"
         uses: bridgecrewio/checkov-action@v12.3126.0
         with:
           file: docker-compose.yml
