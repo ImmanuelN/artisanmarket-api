@@ -113,7 +113,7 @@ jobs:
 
       - name: SonarQube (SAST)
         if: '!cancelled() && env.SONAR_TOKEN != '''' && env.SONAR_HOST_URL != '''''
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
 
       - name: SonarQube not configured
         if: '!cancelled() && (env.SONAR_TOKEN == '''' || env.SONAR_HOST_URL == '''')'
