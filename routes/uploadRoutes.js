@@ -57,7 +57,7 @@ import { requireAuth } from '../middleware/authMiddleware.js';
 // (javascript:S5693, threat T10). Limits are enforced here rather than relying
 // on the body-parser limit, which does not apply to multipart.
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB, matching the documented limit
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -69,7 +69,7 @@ const upload = multer({
     parts: 30
   },
   fileFilter: (req, file, cb) => {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
       return cb(new Error(`Unsupported file type: ${file.mimetype}`));
     }
     cb(null, true);

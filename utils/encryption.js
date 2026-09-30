@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 // Get encryption key from environment variables
 const ENCRYPTION_KEY = process.env.BANK_ENCRYPTION_KEY;

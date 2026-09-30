@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+import crypto from 'node:crypto'
 import { forLog } from '../utils/sanitize.js'
 
 /** Request fields that must never reach a log. */

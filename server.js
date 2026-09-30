@@ -10,7 +10,7 @@ import { Server } from 'socket.io'
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
 import Stripe from 'stripe'
 import mongoose from 'mongoose'
-import crypto from 'crypto'
+import crypto from 'node:crypto'
 import './models/Review.js';
 import './models/Order.js';
 

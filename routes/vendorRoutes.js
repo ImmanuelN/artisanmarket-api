@@ -53,16 +53,18 @@ router.put('/profile', requireAuth, async (req, res) => {
     if (!vendor) {
       // Create new vendor profile
       const user = await User.findById(userId)
-      if (!user) return res.status(404).json({ success: false, message: 'User not found' })
-        // Allow-list instead of spreading req.body. The spread let a vendor set
-        // any schema field on their own profile -- including verification and
-        // financials, i.e. self-verify or set their own balances
-        // (jssecurity:S4684). user and contact stay server-owned.
-        vendor = new Vendor({
-          ...pickFields(req.body, VENDOR_OWNED_FIELDS),
-          user: userId,
-          contact: { email: user.email }
-        })
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' })
+      }
+      // Allow-list instead of spreading req.body. The spread let a vendor set
+      // any schema field on their own profile -- including verification and
+      // financials, i.e. self-verify or set their own balances
+      // (jssecurity:S4684). user and contact stay server-owned.
+      vendor = new Vendor({
+        ...pickFields(req.body, VENDOR_OWNED_FIELDS),
+        user: userId,
+        contact: { email: user.email }
+      })
     } else {
       // Update only the fields provided in req.body
       if (req.body.storeName !== undefined) vendor.storeName = req.body.storeName;

@@ -22,7 +22,8 @@
  */
 export function asString(value) {
   if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'number') return value.toString()
+  if (typeof value === 'boolean') return value.toString()
   return undefined
 }
 
@@ -111,8 +112,10 @@ export function forLog(value) {
     } catch {
       s = '[unserialisable]'
     }
+  } else if (typeof value === 'symbol') {
+    s = value.toString()
   } else {
-    s = String(value)
+    s = `${value}`
   }
   const cleaned = s.replace(LOG_UNSAFE, ' ')
   return cleaned.length > MAX_LOG_LENGTH
@@ -135,7 +138,7 @@ export function pickFields(source, allowed) {
   if (!source || typeof source !== 'object') return {}
   const out = {}
   for (const key of allowed) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key]
+    if (Object.hasOwn(source, key)) out[key] = source[key]
   }
   return out
 }
