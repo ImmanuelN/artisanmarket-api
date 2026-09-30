@@ -1,4 +1,5 @@
 import express from 'express'
+import { asString } from '../utils/sanitize.js'
 import { body, validationResult } from 'express-validator'
 import User from '../models/User.js'
 import Vendor from '../models/Vendor.js'
@@ -26,7 +27,10 @@ router.post('/register', [
     const { name, email, password, role = 'customer' } = req.body
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email })
+    // Coerce to a string: an object such as { $ne: null } would otherwise be
+    // injected as a query operator (threat T1).
+    const emailFilter = asString(email)
+    const existingUser = await User.findOne({ email: emailFilter })
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -101,7 +105,9 @@ router.post('/login', [
     const { email, password } = req.body
 
     // Find user and include password for comparison
-    const user = await User.findOne({ email }).select('+password')
+    // Authentication path: an injected operator here matches an arbitrary user,
+    // so the value must be a string before it reaches the filter (threat T1).
+    const user = await User.findOne({ email: asString(email) }).select('+password')
     if (!user) {
       return res.status(401).json({
         success: false,

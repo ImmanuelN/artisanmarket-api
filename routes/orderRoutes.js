@@ -1,4 +1,5 @@
 import express from 'express';
+import { asEnum } from '../utils/sanitize.js';
 import mongoose from 'mongoose';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -7,14 +8,19 @@ import Product from '../models/Product.js';
 
 const router = express.Router();
 
+// Mirrors the enum on the Order schema. Filtering against a known set stops
+// ?status[$ne]=x injecting an operator into the query (threat T1).
+const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+
 // Get all orders for a customer
 router.get('/', requireAuth, asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, status } = req.query;
   const skip = (page - 1) * limit;
 
   const query = { customer: req.user.id };
-  if (status) {
-    query.status = status;
+  const statusFilter = asEnum(status, ORDER_STATUSES);
+  if (statusFilter) {
+    query.status = statusFilter;
   }
 
   const orders = await Order.find(query)
@@ -252,8 +258,9 @@ router.get('/vendor/orders', requireAuth, asyncHandler(async (req, res) => {
   }
 
   const query = { 'items.vendor': vendor._id };
-  if (status) {
-    query.status = status;
+  const statusFilter = asEnum(status, ORDER_STATUSES);
+  if (statusFilter) {
+    query.status = statusFilter;
   }
 
   const orders = await Order.find(query)

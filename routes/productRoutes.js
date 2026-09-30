@@ -1,4 +1,5 @@
 import express from 'express'
+import { asString, asSafeSearchRegex } from '../utils/sanitize.js'
 import Product from '../models/Product.js'
 import { getCache, setCache, deleteCache } from '../config/redis.js'
 import { requireAuth } from '../middleware/authMiddleware.js'; // Assuming auth middleware exists
@@ -26,16 +27,21 @@ router.get('/', async (req, res) => {
     // Build query
     const query = { status: 'active', isDeleted: false }
     
-    if (category) {
-      query.categories = category
+    // Coerce to a string so ?category[$ne]=x cannot inject an operator (threat T1).
+    const categoryFilter = asString(category)
+    if (categoryFilter) {
+      query.categories = categoryFilter
     }
     
-    if (search) {
-      // Search in product fields
+    // Escape regex metacharacters and cap the length. The raw value was both an
+    // operator-injection vector and a ReDoS vector -- new RegExp(search) let a
+    // caller supply a catastrophically backtracking pattern (threat T1).
+    const searchClause = asSafeSearchRegex(search)
+    if (searchClause) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
+        { title: searchClause },
+        { description: searchClause },
+        { tags: searchClause }
       ]
     }
     
@@ -49,8 +55,9 @@ router.get('/', async (req, res) => {
       query.featured = true
     }
     // Add vendor filter
-    if (req.query.vendor) {
-      query.vendor = req.query.vendor;
+    const vendorFilter = asString(req.query.vendor)
+    if (vendorFilter) {
+      query.vendor = vendorFilter;
     }
 
     // Create cache key
@@ -75,11 +82,11 @@ router.get('/', async (req, res) => {
       .limit(parseInt(limit))
 
     // If searching, also search in vendor store names
-    if (search) {
+    if (searchClause) {
       // Get vendor IDs that match the search term
       const Vendor = mongoose.model('Vendor')
       const matchingVendors = await Vendor.find({
-        storeName: { $regex: search, $options: 'i' }
+        storeName: searchClause
       }).select('_id')
       
       if (matchingVendors.length > 0) {
@@ -111,7 +118,7 @@ router.get('/', async (req, res) => {
     if (search) {
       const Vendor = mongoose.model('Vendor')
       const matchingVendors = await Vendor.find({
-        storeName: { $regex: search, $options: 'i' }
+        storeName: searchClause
       }).select('_id')
       
       if (matchingVendors.length > 0) {
@@ -175,7 +182,11 @@ router.get('/search/combined', async (req, res) => {
       })
     }
 
-    const searchTerm = search.trim()
+    // Sanitised once and reused: escaped, length-capped, operator-free.
+    const searchClause = asSafeSearchRegex(search)
+    if (!searchClause) {
+      return res.status(400).json({ success: false, message: 'Invalid search term' })
+    }
     const skip = (page - 1) * limit
 
     // Search for products
@@ -183,9 +194,9 @@ router.get('/search/combined', async (req, res) => {
       status: 'active',
       isDeleted: false,
       $or: [
-        { title: { $regex: searchTerm, $options: 'i' } },
-        { description: { $regex: searchTerm, $options: 'i' } },
-        { tags: { $in: [new RegExp(searchTerm, 'i')] } }
+        { title: searchClause },
+        { description: searchClause },
+        { tags: searchClause }
       ]
     }
 
@@ -198,7 +209,7 @@ router.get('/search/combined', async (req, res) => {
     // Search for stores/vendors
     const Vendor = mongoose.model('Vendor')
     const storeQuery = {
-      storeName: { $regex: searchTerm, $options: 'i' }
+      storeName: searchClause
     }
 
     const stores = await Vendor.find(storeQuery)

@@ -1,4 +1,5 @@
 import express from 'express'
+import { pickFields } from '../utils/sanitize.js'
 import Vendor from '../models/Vendor.js'
 import User from '../models/User.js'
 import DeliveryProof from '../models/DeliveryProof.js'
@@ -6,6 +7,13 @@ import jwt from 'jsonwebtoken'
 import { getJwtSecret } from '../config/secrets.js'
 
 const router = express.Router()
+
+// Fields a vendor may set on their own profile. Deliberately excludes
+// verification, financials, metrics, settings, isActive and user.
+const VENDOR_OWNED_FIELDS = [
+  'storeName', 'slogan', 'storeDescription', 'logo', 'banner',
+  'business', 'specialties', 'story', 'craftsmanship', 'shipping', 'policies'
+]
 
 // Simple JWT auth middleware
 function requireAuth(req, res, next) {
@@ -46,7 +54,15 @@ router.put('/profile', requireAuth, async (req, res) => {
       // Create new vendor profile
       const user = await User.findById(userId)
       if (!user) return res.status(404).json({ success: false, message: 'User not found' })
-      vendor = new Vendor({ user: userId, contact: { email: user.email }, ...req.body })
+        // Allow-list instead of spreading req.body. The spread let a vendor set
+        // any schema field on their own profile -- including verification and
+        // financials, i.e. self-verify or set their own balances
+        // (jssecurity:S4684). user and contact stay server-owned.
+        vendor = new Vendor({
+          ...pickFields(req.body, VENDOR_OWNED_FIELDS),
+          user: userId,
+          contact: { email: user.email }
+        })
     } else {
       // Update only the fields provided in req.body
       if (req.body.storeName !== undefined) vendor.storeName = req.body.storeName;
