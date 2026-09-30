@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artisanmarket-api
+  namespace: artisanmarket
+  labels:
+    app.kubernetes.io/name: artisanmarket-api
+    app.kubernetes.io/part-of: artisanmarket
+    app.kubernetes.io/component: api
+  annotations:
+    # Documented exceptions, in the same style as the ESLint and ZAP exceptions
+    # elsewhere in this project: recorded in-band with a reason, not suppressed.
+    #
+    # CKV_K8S_43 — the image digest is not knowable when this manifest is
+    # written; it exists only after the Build stage produces the image. The
+    # Deploy stage substitutes tag for digest at apply time. Committing a
+    # placeholder digest would be worse than a pinned tag, because a stale
+    # digest silently deploys a different image than the one scanned.
+    checkov.io/skip1: CKV_K8S_43=Digest substituted by the Deploy stage; a committed placeholder digest would deploy a different image than was scanned
+    #
+    # CKV_K8S_35 — a real control gap, accepted rather than dismissed. The
+    # application reads secrets from the environment (config/secrets.js), so
+    # switching to file-mounted secrets requires changing its secret-loading
+    # contract, which the Staging DAST job also depends on. Compensating
+    # controls: the Secret is never committed (see k8s/README.md), the service
+    # account token is not mounted, the namespace enforces the restricted Pod
+    # Security Standard, and a missing secret fails the process closed rather
+    # than running degraded. Remediation path: support <NAME>_FILE in
+    # config/secrets.js and mount the Secret as a volume.
+    checkov.io/skip2: CKV_K8S_35=App reads secrets from env by design; tracked for migration to file-mounted secrets
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: artisanmarket-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: artisanmarket-api
+        app.kubernetes.io/part-of: artisanmarket
+        app.kubernetes.io/component: api
+    spec:
+      # The API calls no Kubernetes API, so it needs no credential mounted.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # High UID (>10000) so the container user cannot collide with a real
+        # host user (CKV_K8S_40). Matches the `app` user in the image.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          # Tag is rewritten by the Deploy stage. Never :latest — an unpinned
+          # tag makes the scanned image and the running image different things.
+          image: ghcr.io/immanueln/artisanmarket-api:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "5000"
+          # Every secret is injected by reference. None appears literally here,
+          # and the application fails closed if one is missing
+          # (config/secrets.js assertRequiredSecrets, utils/encryption.js,
+          # config/database.js) — see k8s/README.md for creating this Secret.
+          envFrom:
+            - secretRef:
+                name: artisanmarket-api-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+          # readOnlyRootFilesystem is on, so anything the process writes needs an
+          # explicit writable mount. Node uses /tmp for os.tmpdir().
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # /health reports Mongo connectivity, so readiness correctly gates
+          # traffic on the database being reachable.
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
