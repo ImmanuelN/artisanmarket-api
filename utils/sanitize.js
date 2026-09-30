@@ -82,6 +82,44 @@ export function asSafeSearchRegex(value) {
   return { $regex: trimmed.replace(REGEX_METACHARACTERS, '\\$&'), $options: 'i' }
 }
 
+/** Control characters, including CR and LF, that can forge log structure. */
+const LOG_UNSAFE = /[\u0000-\u001F\u007F-\u009F]/g
+
+/** Cap on a single logged value, so one request cannot flood the log. */
+const MAX_LOG_LENGTH = 500
+
+/**
+ * Make a user-controlled value safe to write to a log.
+ *
+ * Newlines are the problem: a caller who puts CR/LF in a path, header or body
+ * field can inject entire fake log lines, hiding real activity or fabricating
+ * evidence. Anything rendered into a log viewer can also carry markup.
+ *
+ * Strips control characters, caps the length, and renders objects as JSON so
+ * the result is a single predictable line (`jssecurity:S5145`).
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function forLog(value) {
+  let s
+  if (value === null || value === undefined) {
+    s = String(value)
+  } else if (typeof value === 'object') {
+    try {
+      s = JSON.stringify(value)
+    } catch {
+      s = '[unserialisable]'
+    }
+  } else {
+    s = String(value)
+  }
+  const cleaned = s.replace(LOG_UNSAFE, ' ')
+  return cleaned.length > MAX_LOG_LENGTH
+    ? `${cleaned.slice(0, MAX_LOG_LENGTH)}…[truncated]`
+    : cleaned
+}
+
 /**
  * Pick only the named fields from a request body.
  *

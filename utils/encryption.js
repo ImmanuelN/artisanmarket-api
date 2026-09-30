@@ -23,10 +23,29 @@ export function encrypt(text) {
     // Generate a random IV
     const iv = crypto.randomBytes(IV_LENGTH);
     
-    // Create cipher
+    // KNOWN FINDING — javascript:S5542, CRITICAL. Accepted, not remediated.
+    //
+    // AES-256-CBC provides confidentiality but NOT integrity. There is no
+    // authentication tag, so stored ciphertext can be modified without
+    // detection: anyone with write access to the database can alter a stored
+    // bank account number and decryption will still "succeed", returning
+    // corrupted-but-plausible plaintext. CBC without a MAC is also exposed to
+    // padding-oracle attacks wherever decryption failures are observable.
+    //
+    // Why it is not fixed here: the correct algorithm is AES-256-GCM, which
+    // emits an additional authentication tag. That changes the stored format,
+    // so every existing record would have to be decrypted under CBC and
+    // re-encrypted under GCM in a migration. Getting that wrong makes financial
+    // data permanently unreadable, so it is a deliberate decision rather than a
+    // code change made in passing.
+    //
+    // Tracked in docs/evidence/finding-ledger.md and threat T8 of
+    // docs/threat-model.md. Compensating controls: the key is never committed,
+    // must be exactly 64 hex characters, and the process refuses to start
+    // without it.
     const cipher = crypto.createCipheriv(
-      'aes-256-cbc', 
-      Buffer.from(ENCRYPTION_KEY, 'hex'), 
+      'aes-256-cbc',
+      Buffer.from(ENCRYPTION_KEY, 'hex'),
       iv
     );
     

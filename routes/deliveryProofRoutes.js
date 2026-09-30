@@ -1,4 +1,5 @@
 import express from 'express';
+import { forLog } from '../utils/sanitize.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -20,7 +21,7 @@ router.get('/order/:orderId', requireAuth, async (req, res) => {
     // First verify that the user has access to this order
     const order = await Order.findById(orderId).populate('customer', '_id');
     if (!order) {
-      console.log('Order not found:', orderId);
+      console.log('Order not found:', forLog(orderId));
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 

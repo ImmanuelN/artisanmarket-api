@@ -1,15 +1,39 @@
+import crypto from 'crypto'
+import { forLog } from '../utils/sanitize.js'
+
+/** Request fields that must never reach a log. */
+const REDACTED_HEADERS = ['authorization', 'cookie', 'x-api-key', 'stripe-signature']
+const REDACTED_BODY_FIELDS = ['password', 'token', 'secret', 'accountNumber', 'cvv', 'cardNumber']
+
+/** Copy an object, replacing sensitive keys with a marker. */
+const redact = (source, keys) => {
+  if (!source || typeof source !== 'object') return source
+  const out = {}
+  for (const [k, v] of Object.entries(source)) {
+    out[k] = keys.includes(k.toLowerCase()) ? '[REDACTED]' : v
+  }
+  return out
+}
+
 // Error handling middleware
 export const errorHandler = (err, req, res, next) => {
-  const reqId = Math.random().toString(36).substring(7)
-  
-  console.error(`💥 [${reqId}] Error in ${req.method} ${req.path}:`)
-  console.error(`💥 [${reqId}] Error name: ${err.name}`)
-  console.error(`💥 [${reqId}] Error message: ${err.message}`)
+  // randomUUID, not Math.random: a correlation id that a caller can predict is
+  // one they can also collide with, making logs harder to trust (S2245).
+  const reqId = crypto.randomUUID()
+
+  // Every interpolated request value is passed through forLog first. Raw values
+  // let a caller put CR/LF in a path or header and forge whole log lines
+  // (jssecurity:S5145).
+  console.error(`💥 [${reqId}] Error in ${forLog(req.method)} ${forLog(req.path)}:`)
+  console.error(`💥 [${reqId}] Error name: ${forLog(err.name)}`)
+  console.error(`💥 [${reqId}] Error message: ${forLog(err.message)}`)
   console.error(`💥 [${reqId}] Stack trace:`, err.stack)
-  
-  // Log request details for debugging
-  console.error(`💥 [${reqId}] Request headers:`, req.headers)
-  console.error(`💥 [${reqId}] Request body:`, req.body)
+
+  // Headers and body are redacted before logging: these previously wrote the
+  // Authorization header and raw request bodies -- including passwords and card
+  // details -- straight to the log.
+  console.error(`💥 [${reqId}] Request headers:`, forLog(redact(req.headers, REDACTED_HEADERS)))
+  console.error(`💥 [${reqId}] Request body:`, forLog(redact(req.body, REDACTED_BODY_FIELDS)))
 
   // Default error
   let error = { ...err }

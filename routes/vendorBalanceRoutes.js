@@ -1,4 +1,5 @@
 import express from 'express';
+import { forLog } from '../utils/sanitize.js';
 import { body, validationResult } from 'express-validator';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import VendorBalance from '../models/VendorBalance.js';
@@ -165,7 +166,7 @@ router.post('/payout',
         // For demo purposes, we'll simulate the transfer
         await vendorBalance.processPayout(amount);
 
-        console.log(`✅ Payout processed for vendor: ${req.user.id}, Amount: $${amount}`);
+        console.log(`✅ Payout processed for vendor: ${forLog(req.user.id)}, Amount: $${forLog(amount)}`);
 
         res.json({
           success: true,
@@ -271,7 +272,7 @@ router.post('/add-earnings',
       // Add earnings
       await vendorBalance.addEarnings(amount);
 
-      console.log(`✅ Earnings added for vendor: ${req.user.id}, Amount: $${amount}`);
+      console.log(`✅ Earnings added for vendor: ${forLog(req.user.id)}, Amount: $${forLog(amount)}`);
 
       res.json({
         success: true,
@@ -407,7 +408,7 @@ router.put('/minimum-payout',
       vendorBalance.minimumPayoutAmount = minimumPayoutAmount;
       await vendorBalance.save();
 
-      console.log(`✅ Minimum payout amount updated for vendor: ${req.user.id} to $${minimumPayoutAmount}`);
+      console.log(`✅ Minimum payout amount updated for vendor: ${forLog(req.user.id)} to $${forLog(minimumPayoutAmount)}`);
 
       res.json({
         success: true,

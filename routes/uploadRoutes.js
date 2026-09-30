@@ -52,7 +52,29 @@ router.post('/imagekit-auth', (req, res) => {
 // If requireAuth is available, import it:
 import { requireAuth } from '../middleware/authMiddleware.js';
 
-const upload = multer({ storage: multer.memoryStorage() });
+// memoryStorage buffers the whole upload in RAM, so an unbounded request is a
+// denial-of-service vector: enough concurrent large uploads exhaust the heap
+// (javascript:S5693, threat T10). Limits are enforced here rather than relying
+// on the body-parser limit, which does not apply to multipart.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB, matching the documented limit
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_UPLOAD_BYTES,
+    files: 10,
+    fields: 20,
+    // Reject unexpected parts outright rather than buffering them.
+    parts: 30
+  },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+      return cb(new Error(`Unsupported file type: ${file.mimetype}`));
+    }
+    cb(null, true);
+  }
+});
 
 // POST /image - upload an image to ImageKit and return the URL
 router.post('/image', requireAuth, upload.single('image'), async (req, res) => {
