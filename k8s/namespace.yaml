@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: artisanmarket
+  labels:
+    app.kubernetes.io/part-of: artisanmarket
+    # Enforce the restricted Pod Security Standard at the namespace boundary, so
+    # a workload that drifts from the hardening below is rejected by the API
+    # server rather than merely flagged by a scanner.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

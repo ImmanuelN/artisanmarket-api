@@ -1,0 +1,31 @@
+# Keep the build context minimal and, more importantly, keep local secrets and
+# git history out of the image entirely.
+.git
+.github
+node_modules
+npm-debug.log*
+
+# Never copy real environment files into a build context. .env is gitignored but
+# present in working trees, and a stray COPY would bake it into a layer.
+.env
+.env.*
+!.env.example
+
+docs
+k8s
+*.md
+!README.md
+
+.eslintrc.json
+.gitleaks.toml
+.zap
+coverage
+.vscode
+.idea
+*.log
+*.db
+*.sqlite
+*.pem
+*.key
+*.crt
+monitor-server.js

@@ -211,7 +211,7 @@ jobs:
 
       - name: Checkov (IaC scan — Kubernetes manifests)
         if: steps.detect.outputs.k8s == 'true'
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@v12.3126.0
         with:
           directory: k8s
           quiet: true
@@ -219,7 +219,7 @@ jobs:
 
       - name: Checkov (IaC scan — docker-compose)
         if: steps.detect.outputs.compose == 'true'
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@v12.3126.0
         with:
           file: docker-compose.yml
           quiet: true
