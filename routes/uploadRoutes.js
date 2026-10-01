@@ -56,14 +56,19 @@ import { requireAuth } from '../middleware/authMiddleware.js';
 // denial-of-service vector: enough concurrent large uploads exhaust the heap
 // (javascript:S5693, threat T10). Limits are enforced here rather than relying
 // on the body-parser limit, which does not apply to multipart.
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB, matching the documented limit
+// 5 MB per file, 4 files. memoryStorage buffers everything in RAM, so the
+// figure that matters is the product: 20 MB per request, not the per-file
+// limit. The previous 10 MB x 10 allowed 100 MB to be buffered by a single
+// caller (javascript:S5693, threat T10). Product images do not need more.
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_FILES = 4;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_UPLOAD_BYTES,
-    files: 10,
+    files: MAX_UPLOAD_FILES,
     fields: 20,
     // Reject unexpected parts outright rather than buffering them.
     parts: 30
