@@ -64,6 +64,22 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 4;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
+
+/**
+ * Multer fileFilter: rejects anything outside the image allow-list.
+ *
+ * Exported so the allow-list can be asserted directly. Relying on the declared
+ * Content-Type alone is not sufficient to prove a file is an image -- it is
+ * caller-supplied -- so this bounds what reaches storage rather than validating
+ * the content itself.
+ */
+export function imageFileFilter(req, file, cb) {
+  if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+    return cb(new Error(`Unsupported file type: ${file.mimetype}`));
+  }
+  cb(null, true);
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -73,12 +89,7 @@ const upload = multer({
     // Reject unexpected parts outright rather than buffering them.
     parts: 30
   },
-  fileFilter: (req, file, cb) => {
-    if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      return cb(new Error(`Unsupported file type: ${file.mimetype}`));
-    }
-    cb(null, true);
-  }
+  fileFilter: imageFileFilter
 });
 
 // POST /image - upload an image to ImageKit and return the URL
