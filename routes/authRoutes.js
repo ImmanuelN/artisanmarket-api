@@ -1,5 +1,4 @@
 import express from 'express'
-import { asString } from '../utils/sanitize.js'
 import { body, validationResult } from 'express-validator'
 import User from '../models/User.js'
 import Vendor from '../models/Vendor.js'

@@ -80,7 +80,7 @@ export function asSafeSearchRegex(value) {
   if (!s) return undefined
   const trimmed = s.trim().slice(0, MAX_SEARCH_LENGTH)
   if (trimmed.length === 0) return undefined
-  return { $regex: trimmed.replace(REGEX_METACHARACTERS, '\\$&'), $options: 'i' }
+  return { $regex: trimmed.replace(REGEX_METACHARACTERS, String.raw`\$&`), $options: 'i' }
 }
 
 /** Control characters, including CR and LF, that can forge log structure. */
