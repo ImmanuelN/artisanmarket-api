@@ -4,6 +4,13 @@
  */
 export default {
   testEnvironment: 'node',
+  // Serial execution. Three suites each start a MongoMemoryServer, and in
+  // parallel workers they race to download and lock the same mongod binary
+  // in ~/.cache/mongodb-binaries -- which fails on a cold CI runner with
+  // UnableToUnlockLockfileError. Running in band makes the download happen
+  // once. The suite takes a few seconds, so there is nothing to gain from
+  // parallelism here.
+  maxWorkers: 1,
   testMatch: ['**/tests/**/*.test.js'],
   // Runs before any module under test is imported. Several modules fail
   // closed at import time without their secrets, which is intended
