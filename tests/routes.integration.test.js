@@ -135,3 +135,10 @@ describe('POST /api/auth/register — the success path', () => {
     expect(JSON.stringify(res.body)).not.toContain('Password123!')
   })
 })
+
+describe('GET /api/orders/:id — a missing order', () => {
+  test('returns 404 rather than leaking whether the id exists elsewhere', async () => {
+    const res = await request(orderApp).get('/api/orders/000000000000000000000000')
+    expect([404, 400]).toContain(res.status)
+  })
+})

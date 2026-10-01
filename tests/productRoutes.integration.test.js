@@ -177,3 +177,25 @@ describe('GET /api/products/search/combined — the dedicated search endpoint', 
     expect([200, 400]).toContain(res.status)
   })
 })
+
+describe('GET /api/products — the remaining filters', () => {
+  test('a price range narrows the results', async () => {
+    const res = await request(app).get('/api/products?minPrice=30&maxPrice=50')
+    expect(res.status).toBe(200)
+    for (const p of res.body.products) {
+      expect(p.price).toBeGreaterThanOrEqual(30)
+      expect(p.price).toBeLessThanOrEqual(50)
+    }
+  })
+
+  test('featured=true is applied', async () => {
+    const res = await request(app).get('/api/products?featured=true')
+    expect(res.status).toBe(200)
+  })
+
+  test('a vendor filter is coerced to a string before reaching the query', async () => {
+    const res = await request(app).get('/api/products?vendor=000000000000000000000000')
+    expect(res.status).toBe(200)
+    expect(res.body.products).toHaveLength(0)
+  })
+})

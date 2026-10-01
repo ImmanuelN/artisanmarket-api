@@ -144,6 +144,13 @@ describe('forLog — log injection (jssecurity:S5145)', () => {
     expect(logged).toContain('[truncated]')
   })
 
+  test('renders a symbol without throwing', () => {
+    // Symbols throw on implicit string conversion, so forLog must convert
+    // explicitly or a logging call could crash the request it is describing.
+    expect(() => forLog(Symbol('trace-id'))).not.toThrow()
+    expect(forLog(Symbol('trace-id'))).toContain('trace-id')
+  })
+
   test('renders null and undefined readably', () => {
     expect(forLog(null)).toBe('null')
     expect(forLog(undefined)).toBe('undefined')

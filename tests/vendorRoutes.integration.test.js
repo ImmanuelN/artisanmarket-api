@@ -142,3 +142,21 @@ describe('GET /api/vendors/profile', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('vendorRoutes auth guard', () => {
+  test('a malformed token is rejected rather than treated as anonymous', async () => {
+    const res = await request(app)
+      .get('/api/vendors/profile')
+      .set('Authorization', 'Bearer not-a-real-token')
+    expect(res.status).toBe(401)
+    expect(res.body.message).toMatch(/invalid token/i)
+  })
+
+  test('a token signed with the wrong secret is rejected', async () => {
+    const forged = jwt.sign({ userId: TEST_USER_ID.toString() }, 'wrong-secret')
+    const res = await request(app)
+      .get('/api/vendors/profile')
+      .set('Authorization', `Bearer ${forged}`)
+    expect(res.status).toBe(401)
+  })
+})
