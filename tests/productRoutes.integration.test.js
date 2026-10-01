@@ -18,6 +18,26 @@ import { MongoMemoryServer } from 'mongodb-memory-server'
 
 jest.setTimeout(120000)
 
+/**
+ * routes/productRoutes.js imports `{ io }` from server.js, so importing the
+ * route would otherwise boot the whole application — connectDB(), the secret
+ * assertions and a listening socket. That circular coupling between route and
+ * entrypoint is a design issue in its own right; here it is stubbed so the
+ * route can be exercised in isolation.
+ *
+ * Redis is stubbed too: the route caches responses, and a live cache would make
+ * these assertions depend on test ordering.
+ */
+jest.unstable_mockModule('../server.js', () => ({
+  io: { emit: () => {}, to: () => ({ emit: () => {} }) }
+}))
+
+jest.unstable_mockModule('../config/redis.js', () => ({
+  getCache: async () => null,
+  setCache: async () => {},
+  deleteCache: async () => {}
+}))
+
 let mongod
 let app
 let Product
@@ -26,10 +46,10 @@ beforeAll(async () => {
   mongod = await MongoMemoryServer.create()
   await mongoose.connect(mongod.getUri())
 
-  // Import after the connection exists so model registration binds to it.
+  // Dynamic import, after the mocks are registered and the connection exists.
   const productRoutes = (await import('../routes/productRoutes.js')).default
-  Product = mongoose.model('Product')
   await import('../models/Vendor.js')
+  Product = mongoose.model('Product')
 
   app = express()
   app.use(express.json())
@@ -52,7 +72,7 @@ beforeAll(async () => {
       description: 'Palm leaf basket',
       price: 40,
       vendor: vendorId,
-      categories: ['weaving'],
+      categories: ['textiles'],
       tags: ['basket'],
       status: 'active',
       isDeleted: false

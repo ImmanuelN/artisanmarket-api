@@ -5,6 +5,10 @@
 export default {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
+  // Runs before any module under test is imported. Several modules fail
+  // closed at import time without their secrets, which is intended
+  // behaviour, so the tests supply ephemeral values.
+  setupFiles: ['<rootDir>/tests/setup.js'],
   // Coverage is reported for application code only. Config, entrypoints and
   // model definitions are excluded: they are declarative or require a live
   // database, and counting them would understate coverage of the code that
