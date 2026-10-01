@@ -400,7 +400,12 @@ io.on('connection', (socket) => {
 
   // Join vendor room for real-time notifications
   socket.on('join-vendor-room', (vendorId) => {
-    socket.join(`vendor-${vendorId}`)
+    // socket.join returns a promise in socket.io v4. Left unhandled, a join
+    // failure becomes an unhandled rejection rather than a logged error
+    // (javascript:S9383).
+    Promise.resolve(socket.join(`vendor-${forLog(vendorId)}`)).catch((err) => {
+      console.error(`❌ Failed to join vendor room: ${forLog(err.message)}`)
+    })
     console.log(`🏪 Vendor ${vendorId} joined room`)
   })
 

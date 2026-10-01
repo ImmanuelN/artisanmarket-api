@@ -104,8 +104,10 @@ const MAX_LOG_LENGTH = 500
  */
 export function forLog(value) {
   let s
-  if (value === null || value === undefined) {
-    s = String(value)
+  if (value === null) {
+    s = 'null'
+  } else if (value === undefined) {
+    s = 'undefined'
   } else if (typeof value === 'object') {
     try {
       s = JSON.stringify(value)

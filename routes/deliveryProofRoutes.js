@@ -47,7 +47,7 @@ router.get('/order/:orderId', requireAuth, async (req, res) => {
       if (vendor) {
         // Check if any items in the order belong to this vendor
         const vendorItems = order.items?.filter(item => 
-          item.vendor && item.vendor.toString() === vendor._id.toString()
+          item.vendor?.toString() === vendor._id.toString()
         );
         if (vendorItems && vendorItems.length > 0) {
           hasAccess = true;

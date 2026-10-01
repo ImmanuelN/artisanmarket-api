@@ -200,7 +200,7 @@ router.get('/stats', requireAuth, async (req, res) => {
     let totalRevenue = 0;
     completedOrders.forEach(order => {
       order.items.forEach(item => {
-        if (item.vendor && item.vendor.toString() === vendor._id.toString()) {
+        if (item.vendor?.toString() === vendor._id.toString()) {
           totalRevenue += (item.price * item.quantity);
         }
       });
