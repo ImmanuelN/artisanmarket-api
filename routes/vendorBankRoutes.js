@@ -1,4 +1,5 @@
 import express from 'express';
+import { forLog } from '../utils/sanitize.js';
 import { body, validationResult } from 'express-validator';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import Vendor from '../models/Vendor.js';
@@ -367,7 +368,7 @@ router.post('/simulate-payout',
         vendor.financials.totalEarnings += amount;
         await vendor.save();
 
-        console.log('Payout simulated successfully for vendor:', req.user.id, 'Amount:', amount);
+        console.log('Payout simulated successfully for vendor:', forLog(req.user.id), 'Amount:', forLog(amount));
 
         res.json({
           success: true,

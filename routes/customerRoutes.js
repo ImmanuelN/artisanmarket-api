@@ -1,4 +1,5 @@
 import express from 'express';
+import { pickFields } from '../utils/sanitize.js';
 import { body, validationResult } from 'express-validator';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
@@ -8,6 +9,13 @@ import ShippingInformation from '../models/ShippingInformation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
+
+// Fields a caller may set on a shipping address. Everything else on the
+// schema -- user, isActive, timestamps -- is server-owned (jssecurity:S4684).
+const SHIPPING_FIELDS = [
+  'firstName', 'lastName', 'email', 'phone', 'address',
+  'city', 'state', 'zipCode', 'country', 'addressType', 'isDefault'
+];
 
 // Get customer stats
 router.get('/stats', requireAuth, asyncHandler(async (req, res) => {
@@ -245,8 +253,10 @@ router.post('/shipping-addresses', requireAuth, [
     });
   }
 
+  // Allow-list instead of spreading req.body: a spread lets a caller set any
+  // schema field, including ones the server owns (jssecurity:S4684).
   const addressData = {
-    ...req.body,
+    ...pickFields(req.body, SHIPPING_FIELDS),
     user: req.user._id
   };
 

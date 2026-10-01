@@ -52,7 +52,45 @@ router.post('/imagekit-auth', (req, res) => {
 // If requireAuth is available, import it:
 import { requireAuth } from '../middleware/authMiddleware.js';
 
-const upload = multer({ storage: multer.memoryStorage() });
+// memoryStorage buffers the whole upload in RAM, so an unbounded request is a
+// denial-of-service vector: enough concurrent large uploads exhaust the heap
+// (javascript:S5693, threat T10). Limits are enforced here rather than relying
+// on the body-parser limit, which does not apply to multipart.
+// 5 MB per file, 4 files. memoryStorage buffers everything in RAM, so the
+// figure that matters is the product: 20 MB per request, not the per-file
+// limit. The previous 10 MB x 10 allowed 100 MB to be buffered by a single
+// caller (javascript:S5693, threat T10). Product images do not need more.
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_FILES = 4;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+
+/**
+ * Multer fileFilter: rejects anything outside the image allow-list.
+ *
+ * Exported so the allow-list can be asserted directly. Relying on the declared
+ * Content-Type alone is not sufficient to prove a file is an image -- it is
+ * caller-supplied -- so this bounds what reaches storage rather than validating
+ * the content itself.
+ */
+export function imageFileFilter(req, file, cb) {
+  if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+    return cb(new Error(`Unsupported file type: ${file.mimetype}`));
+  }
+  cb(null, true);
+}
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_UPLOAD_BYTES,
+    files: MAX_UPLOAD_FILES,
+    fields: 20,
+    // Reject unexpected parts outright rather than buffering them.
+    parts: 30
+  },
+  fileFilter: imageFileFilter
+});
 
 // POST /image - upload an image to ImageKit and return the URL
 router.post('/image', requireAuth, upload.single('image'), async (req, res) => {

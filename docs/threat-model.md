@@ -43,8 +43,8 @@ The pipeline in `.github/workflows/pipeline.yml` applies these controls cumulati
 | T3 | Credential environment variables | Spoofing / Information Disclosure | Eleven call sites across six files fell back to a hardcoded literal when a credential variable was unset. `routes/adminRoutes.js`, `routes/vendorRoutes.js` and `routes/mockApi.js` (×3) verified tokens with `process.env.JWT_SECRET \|\| 'fallback-secret'`, so an unset `JWT_SECRET` made admin and vendor sessions forgeable against a public constant. `server.js` and `routes/paymentRoutes.js` fell back to a placeholder Stripe test key (`sk_test_` prefix) and placeholder Plaid client-id/secret literals | **Remediated.** All five JWT sites now call `getJwtSecret()` from `config/secrets.js`, which throws when the variable is absent, and `assertRequiredSecrets()` fails the process at startup. Stripe and Plaid clients are constructed only when their credentials exist, degrading to a disabled state instead of carrying a fake credential. The ESLint `no-restricted-syntax` rule in `.eslintrc.json` keeps the pattern out at the Code stage |
 | T4 | Login / register | Spoofing | Credential stuffing or brute force against `/api/auth` | **Mitigated** — `express-rate-limit` at `server.js:189` caps each IP at 100 requests per 15 min across `/api/`. Consider a stricter per-route limit on auth endpoints |
 | T5 | Third-party packages | Tampering | A direct or transitive dependency could ship a known vulnerability | SCA gates: `npm audit` on every branch, Snyk at Build stage (staging and main) |
-| T6 | Container image | Tampering | Base image or OS packages could carry known CVEs | Container scan (Trivy) at Build stage — **inactive**, no `Dockerfile` in the repository yet |
-| T7 | Deployment manifests | Tampering / Denial of Service | Misconfigured Kubernetes/compose manifests (missing resource limits, root containers) | IaC scan (Checkov) at Build stage — **inactive**, no `k8s/` or `docker-compose.yml` yet |
+| T6 | Container image | Tampering | Base image or OS packages could carry known CVEs | **Active.** Trivy image scan at Build stage, against the image built from `Dockerfile`. First run found 26 findings (1 CRITICAL): 22 came from npm's own bundled dependency tree in `node:20-alpine`, removed by deleting npm from the runtime stage since it is never invoked there; the rest were openssl `libcrypto3`/`libssl3`, patched explicitly. Now clean at CRITICAL/HIGH |
+| T7 | Deployment manifests | Tampering / Denial of Service | Misconfigured Kubernetes manifests (missing resource limits, root containers, unrestricted network paths) | **Active.** Checkov at Build stage against `k8s/`. 88 checks pass; the namespace additionally enforces the restricted Pod Security Standard so drift is rejected at admission, not merely reported. Two checks carry documented in-band exceptions (`CKV_K8S_43` image digest, `CKV_K8S_35` env-var secrets) |
 | T8 | Bank account linking (`utils/encryption.js`) | Information Disclosure | Account details are encrypted at rest with AES via `BANK_ENCRYPTION_KEY`. A weak, short, or leaked key exposes stored financial data | Key length is asserted at load (64 hex characters); key held only in environment secrets and covered by the Gitleaks gate |
 | T9 | Payments (Stripe, Plaid) | Repudiation / Tampering | Stripe webhooks mutate order and balance state; a forged webhook could mark orders paid | Raw-body handler at `server.js:247` preserves the signature payload; `STRIPE_WEBHOOK_SECRET` must be verified on every webhook — confirm during Code review |
 | T10 | Media upload (`routes/uploadRoutes.js`) | Denial of Service / Tampering | Multer accepts up to 10 MB; unrestricted type or volume could exhaust storage or serve hostile files | Enforce MIME allow-listing and per-user quotas; DAST gate exercises the endpoint |
@@ -53,8 +53,9 @@ T3 was the measured "before" figure for the remediation chapter: eleven real
 hardcoded credential fallbacks, found by the Code-stage ESLint security ruleset
 (`.eslintrc.json`) and since remediated, taking the Code stage from eleven blocking
 findings to zero. These were pre-existing technical debt in the application, not
-seeded test cases. T6 and T7 are staged controls — the pipeline steps exist and
-self-activate as soon as the container and IaC artifacts land.
+seeded test cases. T6 and T7 are **now active**: the `Dockerfile` and `k8s/`
+manifests exist, so the Trivy image scan and Checkov both execute against real
+artifacts rather than self-skipping.
 
 ### Gate status
 

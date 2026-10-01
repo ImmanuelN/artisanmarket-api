@@ -14,7 +14,12 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    // The previous pattern nested quantifiers -- ([.-]?\w+)* -- which backtracks
+      // catastrophically on a crafted address (javascript:S5852). This one is
+      // linear: '@' cannot appear on either side, so there is no ambiguity for the
+      // engine to backtrack over. Strict validation happens at the route via
+      // express-validator's isEmail(), which is the authoritative check.
+      match: [/^[^@\s]+@[^@\s]+$/, 'Please enter a valid email']
   },
   password: {
     type: String,

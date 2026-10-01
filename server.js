@@ -10,6 +10,7 @@ import { Server } from 'socket.io'
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
 import Stripe from 'stripe'
 import mongoose from 'mongoose'
+import crypto from 'node:crypto'
 import './models/Review.js';
 import './models/Order.js';
 
@@ -19,6 +20,7 @@ dotenv.config()
 // Import configurations AFTER loading env vars
 import connectDB from './config/database.js'
 import { assertRequiredSecrets } from './config/secrets.js'
+import { forLog } from './utils/sanitize.js'
 import { connectRedis } from './config/redis.js'
 
 // Import routes
@@ -36,7 +38,6 @@ import vendorBalanceRoutes from './routes/vendorBalanceRoutes.js'
 import customerBalanceRoutes from './routes/customerBalanceRoutes.js'
 import customerRoutes from './routes/customerRoutes.js'
 import deliveryProofRoutes from './routes/deliveryProofRoutes.js'
-import mockApiRoutes from './routes/mockApi.js'
 import keepAliveService from './utils/keepAliveService.js'
 
 // Import middleware
@@ -187,8 +188,20 @@ const io = new Server(server, {
 })
 
 // Security middleware
+// CSP was disabled outright (javascript:S5728, threat T5). This service returns
+// JSON and serves no HTML, so the correct policy is to forbid loading anything
+// at all: if a response is ever rendered in a browser — an error page, a
+// misconfigured route — nothing in it can fetch or execute.
 app.use(helmet({
-  contentSecurityPolicy: false, // Allow for development
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      'default-src': ["'none'"],
+      'frame-ancestors': ["'none'"],
+      'base-uri': ["'none'"],
+      'form-action': ["'none'"]
+    }
+  },
   crossOriginEmbedderPolicy: false
 }))
 
@@ -224,12 +237,12 @@ const corsOptions = {
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`✅ CORS: Allowing origin ${origin}`)
+        console.log(`✅ CORS: Allowing origin ${forLog(origin)}`)
       }
       callback(null, true)
     } else {
       if (process.env.NODE_ENV === 'development') {
-        console.error(`❌ CORS: Blocking origin ${origin}`)
+        console.error(`❌ CORS: Blocking origin ${forLog(origin)}`)
       }
       console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`)
       callback(new Error('Not allowed by CORS'))
@@ -246,7 +259,7 @@ app.use(cors(corsOptions))
 // Additional CORS debugging middleware
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
-    console.log(`🔄 CORS Preflight: ${req.method} ${req.path} from ${req.get('Origin')}`)
+    console.log(`🔄 CORS Preflight: ${forLog(req.method)} ${forLog(req.path)} from ${forLog(req.get('Origin'))}`)
   }
   next()
 })
@@ -271,9 +284,11 @@ if (process.env.NODE_ENV === 'development') {
 // Request tracking middleware
 app.use((req, res, next) => {
   const start = Date.now()
-  const reqId = Math.random().toString(36).substring(7)
+  // randomUUID, not Math.random: a predictable correlation id can be collided
+  // with by a caller, which makes logs harder to trust (javascript:S2245).
+  const reqId = crypto.randomUUID()
   
-  console.log(`📡 [${reqId}] ${req.method} ${req.path}`)
+  console.log(`📡 [${reqId}] ${forLog(req.method)} ${forLog(req.path)}`)
   
   // Track response time and status
   res.on('finish', () => {
@@ -281,18 +296,18 @@ app.use((req, res, next) => {
     const status = res.statusCode
     const color = status >= 400 ? '❌' : status >= 300 ? '⚠️' : '✅'
     
-    console.log(`${color} [${reqId}] ${status} ${req.method} ${req.path} - ${duration}ms`)
+    console.log(`${color} [${reqId}] ${status} ${forLog(req.method)} ${forLog(req.path)} - ${duration}ms`)
     
     // Warn about slow requests
     if (duration > 5000) {
-      console.warn(`🐌 [${reqId}] SLOW REQUEST: ${duration}ms for ${req.method} ${req.path}`)
+      console.warn(`🐌 [${reqId}] SLOW REQUEST: ${duration}ms for ${forLog(req.method)} ${forLog(req.path)}`)
     }
   })
   
   // Detect hanging requests
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`🕐 [${reqId}] REQUEST TIMEOUT: ${req.method} ${req.path} - taking longer than 30s`)
+      console.error(`🕐 [${reqId}] REQUEST TIMEOUT: ${forLog(req.method)} ${forLog(req.path)} - taking longer than 30s`)
     }
   }, 30000)
   
@@ -385,7 +400,12 @@ io.on('connection', (socket) => {
 
   // Join vendor room for real-time notifications
   socket.on('join-vendor-room', (vendorId) => {
-    socket.join(`vendor-${vendorId}`)
+    // socket.join returns a promise in socket.io v4. Left unhandled, a join
+    // failure becomes an unhandled rejection rather than a logged error
+    // (javascript:S9383).
+    Promise.resolve(socket.join(`vendor-${forLog(vendorId)}`)).catch((err) => {
+      console.error(`❌ Failed to join vendor room: ${forLog(err.message)}`)
+    })
     console.log(`🏪 Vendor ${vendorId} joined room`)
   })
 
@@ -406,7 +426,7 @@ io.on('connection', (socket) => {
 
 // Catch-all route for undefined API endpoints
 app.all('/api/*', (req, res) => {
-  console.warn(`⚠️ Undefined API endpoint accessed: ${req.method} ${req.path}`)
+  console.warn(`⚠️ Undefined API endpoint accessed: ${forLog(req.method)} ${forLog(req.path)}`)
   res.status(404).json({
     success: false,
     message: `API endpoint not found: ${req.method} ${req.path}`,

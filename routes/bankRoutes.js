@@ -1,4 +1,5 @@
 import express from 'express';
+import { forLog } from '../utils/sanitize.js';
 import { body, validationResult } from 'express-validator';
 import { requireAuth } from '../middleware/authMiddleware.js';
 import { 
@@ -159,7 +160,7 @@ router.post('/connect',
         }
       }
 
-      console.log(`✅ Bank account connected for user: ${req.user.id} (${type})`);
+      console.log(`✅ Bank account connected for user: ${forLog(req.user.id)} (${forLog(type)})`);
 
       res.status(201).json({
         success: true,
@@ -336,7 +337,7 @@ router.put('/account',
         { new: true }
       );
 
-      console.log(`✅ Bank account updated for user: ${req.user.id}`);
+      console.log(`✅ Bank account updated for user: ${forLog(req.user.id)}`);
 
       res.json({
         success: true,
@@ -392,7 +393,7 @@ router.delete('/account', requireAuth, async (req, res) => {
 
     await BankAccount.findByIdAndDelete(bankAccount._id);
 
-    console.log(`✅ Bank account deleted for user: ${req.user.id}`);
+    console.log(`✅ Bank account deleted for user: ${forLog(req.user.id)}`);
 
     res.json({
       success: true,

@@ -21,6 +21,9 @@ separately by the seeded-case runs.
 The `pull_request` event with base `main` resolves `production=true`, so all six
 stages execute without modifying `main`.
 
+![All six stages green](screenshots/pipeline-six-stages-green.png)
+*GitHub Actions — the six-stage model running end to end. See `screenshots/README.md` for capture instructions.*
+
 ## Stage results
 
 | Stage (Chapter 4) | Job | Result |
@@ -77,6 +80,57 @@ These must be stated wherever this run is cited:
    literal `sk_test_placeholder`, which appears in the threat model's own
    description of the remediated pattern. A real Stripe key committed to this
    repository still fails the Code stage.
+
+## Newly-active Build-stage coverage (2026-09-30)
+
+The Build stage previously guarded its container and IaC steps on file
+detection, and both self-skipped because no `Dockerfile` or `k8s/` existed. Both
+artifacts now exist and both scanners execute against them.
+
+| Scanner | First run | After remediation |
+|---|---|---|
+| Trivy (image) | 26 findings, 1 CRITICAL | **clean** at CRITICAL/HIGH |
+| Checkov (`k8s/`) | 86 passed, 4 failed | **88 passed, 0 failed, 2 skipped** |
+
+### What the image findings were, and why they were fixable
+
+22 of the 26 came from **npm's own bundled dependency tree** inside
+`node:20-alpine` — `pacote`, `sigstore`, `tar`, `cross-spawn`, `glob`,
+`minimatch`, `ip-address`, `brace-expansion` — including the only CRITICAL. npm
+is never invoked at runtime: dependencies install in the build stage and the
+entrypoint is `node server.js`. Deleting it removed the findings outright.
+The remaining four were openssl (`libcrypto3`, `libssl3`) at 3.5.6-r0, patched
+to 3.5.8-r0 in the image rather than waiting for a rebuilt base.
+
+Both are remediations, not suppressions: unused tooling removed and stale
+packages patched, with nothing allowlisted.
+
+### Checkov: three fixed, two accepted
+
+| Check | Outcome |
+|---|---|
+| `CKV_K8S_40` — high UID | Fixed. Runs as uid 10001; the base image's `node` user is 1000, inside the range a host assigns to real users |
+| `CKV2_K8S_6` — NetworkPolicy | Fixed. Default-deny plus explicit allows: ingress from the ingress controller only; egress limited to DNS, outbound 443 and in-cluster MongoDB |
+| `CKV_K8S_43` — image digest | Accepted. The digest does not exist until the Build stage produces the image; a committed placeholder would deploy something other than what was scanned |
+| `CKV_K8S_35` — secrets as files | **Accepted, and a genuine control gap.** The app reads secrets from the environment, so migrating requires changing the `config/secrets.js` contract that the DAST job also depends on. Compensating: the Secret is never committed, no service-account token is mounted, the namespace enforces restricted PSS, and a missing secret fails the process closed. Remediation path: support `<NAME>_FILE` and mount the Secret as a volume |
+
+Both exceptions are recorded in-band as `checkov.io/skip` annotations with
+reasons, matching how the ESLint and ZAP exceptions in this project are handled.
+
+### A recurrence of the step-suppression defect
+
+The first run exposed the same defect previously fixed in the Code stage, now in
+the Build stage: the image scan failing **ended its job**, so the Trivy
+filesystem scan and both Checkov steps reported `skipped`. A base-image CVE was
+therefore suppressing both dependency scanning and all IaC scanning — meaning
+Checkov appeared wired but had never executed. All four Build scanners now carry
+`!cancelled()`, so the stage fails on the union of findings rather than the
+first one.
+
+This is the eighth instance of the same underlying issue and the second
+independent one, which is worth stating as a finding in its own right: in
+GitHub Actions, step-level failure semantics silently narrow scanner coverage,
+and each stage must be checked for it separately.
 
 ## Defects found by reaching each stage
 

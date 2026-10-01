@@ -26,7 +26,13 @@ router.post('/register', [
     const { name, email, password, role = 'customer' } = req.body
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email })
+    // Inline typeof guard rather than a helper call. asString() is equivalent,
+    // but SonarQube's taint analysis does not track sanitisation through a
+    // custom function and kept reporting jssecurity:S5147 here. The guard is
+    // recognised, and the behaviour is identical: an object such as
+    // { $ne: null } yields undefined and the filter matches nothing (threat T1).
+    const emailFilter = typeof email === 'string' ? email : undefined
+    const existingUser = await User.findOne({ email: emailFilter })
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -101,7 +107,11 @@ router.post('/login', [
     const { email, password } = req.body
 
     // Find user and include password for comparison
-    const user = await User.findOne({ email }).select('+password')
+    // Authentication path: an injected operator here would match an arbitrary
+    // user, so the value must be a string before it reaches the filter. Inline
+    // guard for the same taint-tracking reason as above (threat T1).
+    const loginEmail = typeof email === 'string' ? email : undefined
+    const user = await User.findOne({ email: loginEmail }).select('+password')
     if (!user) {
       return res.status(401).json({
         success: false,
