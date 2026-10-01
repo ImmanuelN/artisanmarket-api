@@ -1,84 +1,108 @@
-# Quality gate configuration and its deliberate weakening
+# Quality gate configuration
 
 **Decision date:** 2026-10-01
 
-The Code stage now treats SonarQube as a **gate** rather than a reporting step:
+The Code stage treats SonarQube as a **gate**, not a reporting step:
 `sonar.qualitygate.wait=true` makes the scanner wait for the server-side result
 and fail the build when it is `ERROR`. Without it the step uploads findings and
 passes regardless — which is how a Security rating of **E** sat next to a green
-pipeline for the whole of this project's first Sonar run.
+pipeline on this project's first Sonar run.
 
-## The custom gate
+## The gate is SonarCloud's default, "Sonar way"
 
-The projects use a custom gate, **"ArtisanMarket way"**, which is SonarCloud's
-built-in *Sonar way* with **one condition removed**:
+| Condition | Threshold |
+|---|---|
+| `new_security_rating` | worse than A fails |
+| `new_reliability_rating` | worse than A fails |
+| `new_maintainability_rating` | worse than A fails |
+| `new_coverage` | below 80% fails |
+| `new_duplicated_lines_density` | above 3% fails |
+| `new_security_hotspots_reviewed` | below 100% fails |
 
-| Condition | Sonar way | ArtisanMarket way |
+### Why not a custom gate
+
+A custom gate — *Sonar way* without the coverage condition — was considered and
+**rejected on cost**. SonarCloud restricts assigning any gate other than the
+default to paid plans, and this project is bound by the open-source and
+free-tooling constraint in Section 7.2 of the proposal.
+
+The free tier therefore fixes the conditions, including the 80% coverage
+threshold. The project meets them rather than relaxing them.
+
+This is worth recording as a finding about tool selection rather than a
+footnote: a free-tier hosted scanner can constrain engineering decisions in ways
+the tool's feature list does not make obvious, and the constraint only surfaced
+at the point of trying to act on it. The alternative that preserves custom gates
+within the budget constraint is self-hosted SonarQube Community Edition, which
+supports them — at the cost of running a server reachable from CI, judged
+disproportionate for this prototype.
+
+## Reaching the coverage threshold
+
+The project had no tests at all when SonarQube was first wired in, so
+`new_coverage` was 0% and the gate failed outright.
+
+A suite was written rather than the threshold avoided:
+
+| Suite | Tests | Target |
 |---|---|---|
-| `new_security_rating` > A | fail | **fail** |
-| `new_reliability_rating` > A | fail | **fail** |
-| `new_maintainability_rating` > A | fail | **fail** |
-| `new_duplicated_lines_density` > 3% | fail | **fail** |
-| `new_security_hotspots_reviewed` < 100% | fail | **fail** |
-| `new_coverage` < 80% | fail | **removed** |
+| `tests/sanitize.test.js` | 29 | the sanitisers, as security properties |
+| `tests/errorHandler.test.js` | 9 | credential redaction and log injection |
+| `tests/productRoutes.integration.test.js` | 9 | product query construction, real MongoDB |
+| `tests/routes.integration.test.js` | 7 | auth and order query construction |
 
-Every security-relevant condition still blocks. Only the coverage condition is
-dropped.
+These assert security properties rather than chasing lines: that an injected
+operator cannot change what a query matches, that a catastrophic regex is
+matched literally, that card numbers never reach a log. A regression that
+reintroduces a vulnerability fails the build here rather than only being
+re-reported by the scanner.
 
-## Why coverage was dropped, honestly
+The suite earned its place immediately by catching a real bug in work done
+earlier in the same session: the error-handler redaction compared whole keys
+against a camelCase list while lowercasing the key, so `cardNumber` became
+`cardnumber`, never matched, and card and account numbers were still being
+logged in full.
 
-This is a weakening of the gate and is recorded as such rather than quietly
-applied.
+### A testability finding
 
-A test suite was written for this project — 38 unit tests and 9 route
-integration tests running against a real in-memory MongoDB. They took
-`new_coverage` from **0% to 59.7%**. Reaching 80% would require covering the
-remaining changed lines across seven further route files plus `server.js`.
+Making the route tests runnable surfaced two properties of the codebase:
 
-That was judged not worth doing, for a specific reason rather than
-inconvenience: **every one of those routes transitively imports `server.js`**,
-so each needs the same `jest.unstable_mockModule` scaffolding that
-`productRoutes` needed before it could be loaded at all. The work is mechanical,
-substantial, and buys a green gate rather than better security. The tests that
-matter — the ones asserting that an injected operator cannot change a query, and
-that a catastrophic regex is matched literally — are written and passing.
+1. **Modules fail closed at import time.** `utils/encryption.js` and
+   `config/secrets.js` call `process.exit(1)` without their secrets. That is
+   correct — it is the threat T3 remediation — but it means anything importing
+   them needs values present, which `tests/setup.js` generates per run.
+2. **`routes/productRoutes.js` imports `{ io }` from `server.js`**, so importing
+   that one route boots the whole application: `connectDB()`, the secret
+   assertions and a listening socket. It is the **only** route that does; the
+   others load cleanly. The coupling is stubbed at the test boundary rather than
+   refactored, and recorded here as a design issue — that route was untestable
+   in isolation until mocked.
 
-**What this costs:** a future change can add untested code without the gate
-objecting. Coverage is still measured and visible on the SonarCloud dashboard;
-it is simply not blocking.
-
-**Revisit when:** the route/entrypoint circular import is resolved, which would
-make route tests cheap enough that 80% is reachable without per-file mocking.
+Also corrected here: `tests/setup.js` was initially analysed as production
+source, because `sonar.test.inclusions` only matched `*.test.js`. It contributed
+six uncovered lines to the coverage calculation before the pattern was widened
+to `tests/**/*`.
 
 ## Known false positives, marked in SonarCloud
 
 Two `jssecurity:S5147` (NoSQL injection, BLOCKER) findings at
-`routes/authRoutes.js` are marked **False Positive** in the SonarCloud UI.
+`routes/authRoutes.js` are marked **False Positive**. Marking issues is
+available on the free tier; only custom gates are not.
 
 They are genuinely not exploitable. The value reaching the Mongoose filter is
-guarded by `typeof email === 'string'`, so an object such as `{ $ne: null }`
-becomes `undefined` and the filter matches nothing. Both routes additionally
-have `express-validator`'s `isEmail()` running ahead of the query.
+guarded by `typeof email === 'string'`, so `{ $ne: null }` becomes `undefined`
+and the filter matches nothing. Both routes additionally run
+`express-validator`'s `isEmail()` ahead of the query, and
+`tests/routes.integration.test.js` asserts directly that an operator object
+cannot authenticate.
 
-Three forms were tried before concluding this: the original raw value, a shared
-`asString()` helper, and the inline `typeof` guard. Sonar reported the flow in
-every case. **Its taint analysis does not track sanitisation through a type
+Three forms were tried before concluding this: the raw value, a shared
+`asString()` helper, and an inline `typeof` guard. Sonar reported the flow in
+every case — **its taint analysis does not track sanitisation through a type
 guard or a custom function.** Further restructuring would have made the code
-worse to satisfy a tool rather than to improve security, so the findings were
-marked rather than chased.
+worse to satisfy a tool rather than to improve security.
 
 This is a reportable result in its own right: SAST false positives survive
 correct remediation when the analyser cannot see the sanitiser, and a process
-that requires every finding to reach zero will eventually pressure engineers
-into contorting working code.
-
-## Reproducing this configuration
-
-1. **SonarCloud → Quality Gates → Create** — name it `ArtisanMarket way`, copy
-   *Sonar way*, then delete the `Coverage on New Code` condition.
-2. **Assign it** to both `ImmanuelN_artisanmarket-api` and
-   `ImmanuelN_artisanmarket` (Project → Administration → Quality Gate).
-3. **Mark the two `S5147` findings** on `routes/authRoutes.js` as *False
-   Positive*, citing this document.
-4. `sonar.qualitygate.wait=true` is already set in `sonar-project.properties`;
-   no pipeline change is needed.
+requiring every finding to reach zero will eventually pressure engineers into
+contorting working code.
