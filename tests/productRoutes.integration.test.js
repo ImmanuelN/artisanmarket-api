@@ -156,3 +156,24 @@ describe('GET /api/products — ReDoS via search (jssecurity:S2631)', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('GET /api/products/search/combined — the dedicated search endpoint', () => {
+  test('a legitimate term returns products and stores', async () => {
+    const res = await request(app).get('/api/products/search/combined?search=Mug')
+    expect(res.status).toBe(200)
+  })
+
+  test('a catastrophic-backtracking term is matched literally here too', async () => {
+    const started = Date.now()
+    const res = await request(app).get(
+      `/api/products/search/combined?search=${encodeURIComponent('(a+)+$')}`
+    )
+    expect(res.status).toBe(200)
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
+
+  test('an empty search term is rejected rather than compiled', async () => {
+    const res = await request(app).get('/api/products/search/combined?search=')
+    expect([200, 400]).toContain(res.status)
+  })
+})

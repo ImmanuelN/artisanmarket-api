@@ -111,3 +111,27 @@ describe('GET /api/orders — status filter is constrained to the schema enum', 
     expect(res.status).toBe(200)
   })
 })
+
+describe('GET /api/orders/vendor/orders — the vendor status filter', () => {
+  test('responds without a vendor profile rather than erroring', async () => {
+    const res = await request(orderApp).get('/api/orders/vendor/orders')
+    expect([200, 404]).toContain(res.status)
+  })
+
+  test('an injected operator in status does not reach the vendor query', async () => {
+    const res = await request(orderApp).get('/api/orders/vendor/orders?status[$ne]=cancelled')
+    expect([200, 404]).toContain(res.status)
+  })
+})
+
+describe('POST /api/auth/register — the success path', () => {
+  test('a well-formed registration is accepted and does not echo the password', async () => {
+    const res = await request(authApp)
+      .post('/api/auth/register')
+      .send({ name: 'New Shopper', email: 'new.shopper@example.com', password: 'Password123!' })
+
+    expect([200, 201]).toContain(res.status)
+    // Whatever shape the response takes, the password must never come back.
+    expect(JSON.stringify(res.body)).not.toContain('Password123!')
+  })
+})

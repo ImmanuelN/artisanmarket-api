@@ -120,3 +120,25 @@ describe('PUT /api/vendors/profile — mass assignment', () => {
     expect(saved.user.toString()).toBe(TEST_USER_ID.toString())
   })
 })
+
+describe('GET /api/vendors/profile', () => {
+  test('returns 404 when no profile exists yet', async () => {
+    const res = await request(app).get('/api/vendors/profile').set(...authHeader())
+    expect(res.status).toBe(404)
+  })
+
+  test('returns the profile once created', async () => {
+    await request(app)
+      .put('/api/vendors/profile')
+      .set(...authHeader())
+      .send({ storeName: 'Kiln & Co' })
+
+    const res = await request(app).get('/api/vendors/profile').set(...authHeader())
+    expect(res.status).toBe(200)
+  })
+
+  test('rejects a request with no token', async () => {
+    const res = await request(app).get('/api/vendors/profile')
+    expect(res.status).toBe(401)
+  })
+})
