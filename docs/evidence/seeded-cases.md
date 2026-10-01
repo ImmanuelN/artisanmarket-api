@@ -35,6 +35,10 @@ depends on a pre-existing failure.
 Every case failed the pipeline at its intended gate, and no case failed anywhere
 else.
 
+Screenshots of each blocked run are listed in `screenshots/README.md`; capture
+them with the failing stage name visible, since which gate caught the defect is
+the evidence, not that the run was red.
+
 ## Isolation
 
 The two Code-stage cases cross over cleanly. Each scanner fires on its own defect
