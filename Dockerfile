@@ -10,7 +10,10 @@
 # BANK_ENCRYPTION_KEY or MONGODB_URI exits rather than running degraded.
 
 # ---------- dependencies ----------
-FROM node:20-alpine AS deps
+# SEED-IMAGE-01: deliberately outdated base image.
+# node:18.17-alpine ships alpine 3.18, whose OS packages carry known
+# CRITICAL/HIGH CVEs. Expected to be caught by the Trivy image scan.
+FROM node:18.17-alpine AS deps
 
 WORKDIR /app
 
@@ -22,7 +25,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # ---------- runtime ----------
-FROM node:20-alpine AS runtime
+FROM node:18.17-alpine AS runtime
 
 # dumb-init gives PID 1 correct signal handling, so SIGTERM reaches the app and
 # the existing graceful-shutdown handlers in config/database.js actually run.
