@@ -136,20 +136,25 @@ Two conclusions follow for Chapter 5:
 
 ## Scope limit
 
-Four of the six active gates have a seeded case. Two do not:
+Four of the seven active gates have an isolated seeded case: SEED-SAST-01,
+SEED-SECRET-01, SEED-SCA-01 and SEED-DAST-01 above. Three do not yet.
 
 **Checkov** and the **Trivy image scan** became active on 2026-09-30, when the
 `Dockerfile` and `k8s/` manifests were added — before that both self-skipped for
-want of anything to scan. Their detection capability is currently evidenced only
-*incidentally*: Checkov's first genuine run reported 86 passed / 4 failed against
-the new manifests, and the first image scan reported 26 findings including a
-CRITICAL. Those are real detections, but they are not isolated cases — the commit
-that introduced them changed many things at once, so neither can be cited the way
-SEED-SAST-01 through SEED-SCA-01 can. A fifth seeded case isolating Checkov (one
-deliberate manifest misconfiguration, one commit off green) is the outstanding
-work here.
+want of anything to scan. Their detection capability is evidenced only
+*incidentally*: Checkov's first genuine run reported 86 passed / 4 failed
+against the new manifests, and the first image scan reported 26 findings
+including a CRITICAL. Those are real detections, but the commit that introduced
+them changed many things at once, so neither can be cited the way the four
+seeded cases can.
 
-**SonarQube** is skipped entirely while `SONAR_TOKEN` and `SONAR_HOST_URL` are
-unset. It has never executed, so nothing about it is evidenced — not detection,
-not even configuration validity. This is blocked on account provisioning, not on
-pipeline work, and must not be simulated.
+**SonarQube** became active on 2026-10-01 and is now a blocking gate:
+`sonar.qualitygate.wait=true` fails the build when the server-side gate returns
+ERROR, and the project passes SonarCloud's unmodified default gate. Its
+*configuration* is therefore evidenced, and it has caught real findings — 57
+vulnerabilities on first analysis, all since remediated. But it has no isolated
+seeded case either, so "SonarQube blocks a defect that the other gates miss" is
+not yet demonstrated.
+
+A seeded case for each of these three is the outstanding work. Each is now
+straightforward, since all three gates are active and blocking.
