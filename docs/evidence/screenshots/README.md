@@ -71,16 +71,30 @@ One per seeded case. Open each draft PR and capture the failed check, with the
 **failing stage name visible** — the point is which gate caught it, not that
 something was red.
 
-| File | PR |
-|---|---|
-| `seed-sast-01-blocked.png` | [#3](https://github.com/ImmanuelN/artisanmarket-api/pull/3) — ESLint, Code |
-| `seed-secret-01-blocked.png` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) — Gitleaks, Code |
-| `seed-dast-01-blocked.png` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) — ZAP, Staging |
-| `seed-sca-01-blocked.png` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) — Trivy, Build |
+| File | PR | Failing step to capture |
+|---|---|---|
+| `seed-sast-01-blocked.png` | [#3](https://github.com/ImmanuelN/artisanmarket-api/pull/3) | Code · **ESLint (security ruleset)** |
+| `seed-secret-01-blocked.png` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) | Code · **Gitleaks** |
+| `seed-dast-01-blocked.png` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) | Staging · **OWASP ZAP baseline** |
+| `seed-sca-01-blocked.png` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) | Build · **Trivy (filesystem)** |
+| `seed-iac-01-blocked.png` | [#11](https://github.com/ImmanuelN/artisanmarket-api/pull/11) | Build · **Checkov (Kubernetes)** |
+| `seed-image-01-blocked.png` | [#12](https://github.com/ImmanuelN/artisanmarket-api/pull/12) | Build · **Trivy (container image)** |
+| `seed-sonar-01-blocked.png` | [#13](https://github.com/ImmanuelN/artisanmarket-api/pull/13) | Code · **SonarQube** |
 
-For `seed-sca-01-blocked.png`, make sure **both** the passing `npm audit` step
-and the failing Trivy step are in the same frame. That contrast is the finding:
-one tool reports the tree clean while the other blocks the build.
+Three of these need a passing step in the same frame as the failing one,
+because the **contrast** is the finding rather than the failure:
+
+| File | Must also show | Why |
+|---|---|---|
+| `seed-sca-01-blocked.png` | `npm audit` **passing** | one SCA tool reports the tree clean while the other blocks |
+| `seed-image-01-blocked.png` | Trivy **filesystem** scan passing | the two Trivy modes inspect different things; only the image scan sees a vulnerable base |
+| `seed-sonar-01-blocked.png` | ESLint, Gitleaks, npm audit **and the test step** all passing | this is the case that justifies SAST in the model — every other Code-stage gate is green |
+
+For `seed-iac-01-blocked.png`, capture the **SonarQube step passing** alongside
+the Checkov failure. SonarQube has Kubernetes rules of its own and catches a
+subset of IaC misconfiguration; this case was deliberately chosen as one it
+cannot see, so the pair of results is what demonstrates Checkov's distinct
+contribution.
 
 ## 6. `sonar-false-positive.png`
 

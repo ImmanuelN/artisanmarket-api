@@ -22,6 +22,9 @@ depends on a pre-existing failure.
 | SEED-SECRET-01 | `seed/secret-01` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) | 1 file, +15 |
 | SEED-DAST-01 | `seed/dast-01` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) | 1 file, +10 / −4 |
 | SEED-SCA-01 | `seed/sca-01` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) | 2 files (manifest + lockfile only) |
+| SEED-IAC-01 | `seed/iac-01` | [#11](https://github.com/ImmanuelN/artisanmarket-api/pull/11) | 1 file deleted |
+| SEED-IMAGE-01 | `seed/image-01` | [#12](https://github.com/ImmanuelN/artisanmarket-api/pull/12) | 1 file, +5 / −2 |
+| SEED-SONAR-01 | `seed/sonar-01` | [#13](https://github.com/ImmanuelN/artisanmarket-api/pull/13) | 1 file, +12 / −3 |
 
 ## Results
 
@@ -31,6 +34,9 @@ depends on a pre-existing failure.
 | SEED-SECRET-01 | High-entropy secret committed as a standalone assignment | Gitleaks | Code | **detected** |
 | SEED-DAST-01 | `helmet` middleware disabled | OWASP ZAP baseline | Staging | **detected** |
 | SEED-SCA-01 | `multer` downgraded to a version with 10 HIGH CVEs | Trivy filesystem scan | Build | **detected** |
+| SEED-IAC-01 | `k8s/networkpolicy.yaml` deleted | Checkov (`CKV2_K8S_6`) | Build | **detected** |
+| SEED-IMAGE-01 | base image pinned back to `node:18.17-alpine` | Trivy image scan | Build | **detected** |
+| SEED-SONAR-01 | mass assignment in an untested route | SonarQube (`jssecurity:S4684`) | Code | **detected** |
 
 Every case failed the pipeline at its intended gate, and no case failed anywhere
 else.
@@ -62,6 +68,9 @@ in full and only the running-application scan observes it.
 | SEED-SAST-01 | pass | **fail** | skipped | skipped |
 | SEED-SECRET-01 | pass | **fail** | skipped | skipped |
 | SEED-DAST-01 | pass | pass | pass | **fail** |
+| SEED-IAC-01 | pass | pass | **fail** | skipped |
+| SEED-IMAGE-01 | pass | pass | **fail** | skipped |
+| SEED-SONAR-01 | pass | **fail** | skipped | skipped |
 | SEED-SCA-01 | pass | pass | **fail** | skipped |
 
 ## SEED-DAST-01 — measured delta
@@ -134,27 +143,59 @@ Two conclusions follow for Chapter 5:
    were both advisory, neither finding surfaced as a failure, and the vulnerable
    dependency reached `main`.
 
+## Two cases had to be re-seeded, and both failures are findings
+
+Neither attempt below was wasted. Each exposed a property of the pipeline that
+only a controlled case could surface.
+
+### SonarQube also scans Kubernetes, and an earlier gate masks a later one
+
+The first SEED-IAC-01 weakened the container security context — `privileged`,
+`allowPrivilegeEscalation` and `readOnlyRootFilesystem`. It did not isolate
+Checkov. SonarQube flagged `kubernetes:S6428` and `kubernetes:S6430` at the
+**Code** stage, which failed the job and skipped Build through the `needs`
+chain, so Checkov never ran.
+
+Two consequences:
+
+1. **IaC coverage overlaps across stages.** SonarQube catches a subset of
+   Kubernetes misconfiguration earlier than Checkov. That is useful defence in
+   depth, and it was invisible until a seeded case exposed the ordering.
+2. **An earlier gate masks a later one.** Because Build depends on Code, a
+   defect both could catch is only ever attributed to the earlier. This is
+   correct fail-fast behaviour, but it means "Checkov catches X" cannot be
+   demonstrated for any X that SonarQube also catches.
+
+The case was re-seeded as a deleted NetworkPolicy. `CKV2_K8S_6` is a **graph
+check** — it reasons across resources, observing that a Deployment exists and
+that no NetworkPolicy selects its pods. SonarQube analyses manifests
+individually and has no equivalent, so nothing is wrong *within* any single
+remaining file.
+
+### The test suite detects a regression before the scanner does
+
+The first SEED-SONAR-01 reintroduced NoSQL injection in `productRoutes`. This
+project's own integration tests caught it, failing the Code stage at the **test**
+step rather than at SonarQube.
+
+That is defence in depth working as intended, and it inverts the usual
+assumption about where a vulnerability is caught: the regression tests written
+during remediation are a faster and more specific detector than the scanner, for
+the specific defects they cover.
+
+The case was re-seeded in `customerRoutes`, which `tests/moduleLoad.test.js`
+imports to assert it exposes a router but never invokes. Verified before
+pushing: ESLint clean, all 102 tests passing, `npm audit` passing — so when the
+gate fails, nothing else can be credited.
+
 ## Scope limit
 
-Four of the seven active gates have an isolated seeded case: SEED-SAST-01,
-SEED-SECRET-01, SEED-SCA-01 and SEED-DAST-01 above. Three do not yet.
+Every active gate now has an isolated seeded case. Nothing in the pipeline is
+evidenced only incidentally.
 
-**Checkov** and the **Trivy image scan** became active on 2026-09-30, when the
-`Dockerfile` and `k8s/` manifests were added — before that both self-skipped for
-want of anything to scan. Their detection capability is evidenced only
-*incidentally*: Checkov's first genuine run reported 86 passed / 4 failed
-against the new manifests, and the first image scan reported 26 findings
-including a CRITICAL. Those are real detections, but the commit that introduced
-them changed many things at once, so neither can be cited the way the four
-seeded cases can.
-
-**SonarQube** became active on 2026-10-01 and is now a blocking gate:
-`sonar.qualitygate.wait=true` fails the build when the server-side gate returns
-ERROR, and the project passes SonarCloud's unmodified default gate. Its
-*configuration* is therefore evidenced, and it has caught real findings — 57
-vulnerabilities on first analysis, all since remediated. But it has no isolated
-seeded case either, so "SonarQube blocks a defect that the other gates miss" is
-not yet demonstrated.
-
-A seeded case for each of these three is the outstanding work. Each is now
-straightforward, since all three gates are active and blocking.
+One caveat on attribution: the stage matrix above shows `skipped` rather than
+`pass` for stages after the failing one, because the `needs` chain stops them.
+A case therefore demonstrates that its gate **catches** the defect, and that
+every gate **before** it does not. It cannot demonstrate that a later gate would
+have missed it. For SEED-SONAR-01 this matters least — it fails at Code, the
+earliest automated stage, with every scanner in that stage passing alongside it.
