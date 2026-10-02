@@ -23,8 +23,13 @@ The project passes SonarCloud's **unmodified default gate**, *Sonar way*:
 
 No condition was relaxed and no paid feature was used.
 
-![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png)
-*SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
+> **Screenshot pending — `screenshots/sonar-gate-passed-api.png`.**
+> *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
+> Capture instructions are in `screenshots/README.md`. Once the file is
+> committed, delete this block and uncomment the embed below it.
+
+<!-- ![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png) -->
+<!-- *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.* -->
 
 ### Why not a custom gate
 
@@ -58,8 +63,14 @@ The project had no tests when SonarQube was wired in, so `new_coverage` was 0%.
 | Remaining route paths | 77.8% |
 | Targeted tests on the last uncovered lines | **80.1%** |
 
-![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png)
-*Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.*
+> **Screenshot pending — `screenshots/sonar-coverage-api.png`.**
+> *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.*
+> Capture instructions are in `screenshots/README.md`. Once the file is
+> committed, delete this block and uncomment the embed below it.
+
+<!-- ![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png) -->
+<!-- *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.* -->
+
 
 **102 tests across 7 files.** They assert security properties rather than
 chasing lines — that an injected operator cannot change what a query matches,
