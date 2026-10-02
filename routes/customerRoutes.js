@@ -253,10 +253,19 @@ router.post('/shipping-addresses', requireAuth, [
     });
   }
 
-  // Allow-list instead of spreading req.body: a spread lets a caller set any
-  // schema field, including ones the server owns (jssecurity:S4684).
+  // SEED-SONAR-01: the allow-list is deliberately removed, so the request body
+  // is spread wholesale into the model and a caller can set any schema field
+  // the server owns (jssecurity:S4684, mass assignment).
+  //
+  // Chosen because every other gate misses it. The Code-stage ESLint ruleset
+  // targets credential fallbacks, eval and HTML sinks -- not taint flow into a
+  // model write. No test exercises this route: tests/moduleLoad.test.js imports
+  // customerRoutes but never calls it. Gitleaks sees no secret, npm audit and
+  // Trivy see no dependency change, Checkov sees no manifest change, and ZAP
+  // does not reach an authenticated POST. Only SonarQube's taint analysis
+  // tracks it.
   const addressData = {
-    ...pickFields(req.body, SHIPPING_FIELDS),
+    ...req.body,
     user: req.user._id
   };
 
