@@ -3,6 +3,7 @@
 Applied in order:
 
 ```sh
+# SEED-IAC-01: k8s/networkpolicy.yaml is deliberately absent.
 kubectl apply -f k8s/namespace.yaml
 # create the Secret (below) before the Deployment, or pods will CrashLoopBackOff
 kubectl apply -f k8s/deployment.yaml
