@@ -7,6 +7,7 @@
 
 import axios from 'axios'
 import { exec } from 'child_process'
+import { forLog } from './utils/sanitize.js'
 import { promisify } from 'util'
 
 const execAsync = promisify(exec)
@@ -91,19 +92,23 @@ async function performDetailedHealthCheck() {
     })
     
     const health = healthResponse.data
+    // Values below come from the monitored service, not from this process, so
+    // they are untrusted input: a control character in a health field could
+    // forge whole log lines and hide a real failure (jssecurity:S5145).
+    // forLog strips control characters and caps the length.
     console.log(`📊 Detailed health check:`)
     console.log(`   Uptime: ${Math.floor(health.uptime / 60)}m ${Math.floor(health.uptime % 60)}s`)
-    console.log(`   Memory: ${health.memory?.used || 'unknown'}MB used`)
-    console.log(`   Database: ${health.database?.mongodb || 'unknown'}`)
+    console.log(`   Memory: ${forLog(health.memory?.used || 'unknown')}MB used`)
+    console.log(`   Database: ${forLog(health.database?.mongodb || 'unknown')}`)
     
     // Warn about high memory usage
     if (health.memory?.used > 300) {
-      console.warn(`⚠️ High memory usage: ${health.memory.used}MB`)
+      console.warn(`⚠️ High memory usage: ${forLog(health.memory.used)}MB`)
     }
     
     // Warn about database issues
     if (health.database?.mongodb !== 'connected') {
-      console.warn(`⚠️ Database issue: ${health.database?.mongodb}`)
+      console.warn(`⚠️ Database issue: ${forLog(health.database?.mongodb)}`)
     }
     
   } catch (error) {

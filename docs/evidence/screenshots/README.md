@@ -20,7 +20,7 @@ rather than capturing the whole page.
 **Referenced by:** `quality-gate.md` — the Result section.
 
 ```
-https://sonarcloud.io/summary/pull_request?id=ImmanuelN_artisanmarket-api&pullRequest=10
+https://sonarcloud.io/dashboard?id=ImmanuelN_artisanmarket-api&pullRequest=10
 ```
 
 Capture the **Quality Gate** panel showing **Passed**, with all six conditions
@@ -39,16 +39,29 @@ against the 80% threshold.
 **Referenced by:** `end-to-end-run.md`.
 
 ```
-https://sonarcloud.io/project/overview?id=ImmanuelN_artisanmarket-api
+https://sonarcloud.io/dashboard?id=ImmanuelN_artisanmarket-api
 ```
 
 The project overview with the Security, Reliability and Maintainability ratings.
 
-> Useful for Chapter 5: if you still have the **first** analysis showing
-> Security **E** with 57 vulnerabilities, capture that too as
-> `sonar-overview-api-before.png`. A before/after pair is far stronger evidence
-> than the after alone. The figures are in `finding-ledger.md` if the dashboard
-> no longer shows the original state.
+> **Read this before capturing.** As of 2026-10-02 this page shows Security
+> **E** with **13** open issues, not a clean rating, while the quality gate on
+> the same page reads **Passed**. Both are correct and the difference is the
+> point: the gate is evaluated on **New Code**, whereas the letter ratings are
+> evaluated on the **whole codebase**, including code written before the
+> pipeline existed.
+>
+> The 13 break down as 8 `jssecurity:S5147` of the same false-positive class
+> already documented in `quality-gate.md` but not yet marked on the `main`
+> branch, 4 `jssecurity:S5145` in `monitor-server.js`, and the 1 accepted
+> `javascript:S5542`. See the "Overall ratings versus the gate" section of
+> `quality-gate.md` before presenting this screenshot, because an examiner
+> will read "Security E" as contradicting the remediation claim unless the
+> New Code distinction is made explicitly.
+>
+> Capture the Quality Gate panel and the letter ratings **in the same frame**,
+> so the two coexisting facts are visible together rather than appearing to
+> contradict each other across two figures.
 
 ## 4. `pipeline-six-stages-green.png`
 
@@ -101,8 +114,12 @@ contribution.
 **Referenced by:** `quality-gate.md` — the false positives section.
 
 ```
-https://sonarcloud.io/project/issues?id=ImmanuelN_artisanmarket-api&pullRequest=10&rules=jssecurity%3AS5147&resolved=true
+https://sonarcloud.io/project/issues?id=ImmanuelN_artisanmarket-api&pullRequest=10
 ```
+
+Open the link, then filter to **Rule: `jssecurity:S5147`** and set the
+resolution facet to include resolved issues — the facet names change between
+SonarCloud releases, so navigate rather than relying on a query-string.
 
 One of the two `S5147` issues showing the **False Positive** resolution **and
 the comment explaining why**. The comment is the part that matters — it is what

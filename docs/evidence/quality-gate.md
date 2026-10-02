@@ -120,6 +120,70 @@ improvement, but it was not done here: the 80% threshold was met without it, and
 refactoring the entrypoint purely to satisfy a metric is the wrong reason to
 touch a working boot path.
 
+## Overall ratings versus the gate (checked 2026-10-02)
+
+The SonarCloud project page for `ImmanuelN_artisanmarket-api` shows two facts
+that look contradictory and are both correct:
+
+| Shown on the project page | Value |
+|---|---|
+| Quality Gate | **Passed** |
+| Security rating | **E**, 13 open issues |
+| Reliability rating | C, 44 open issues |
+| Maintainability rating | A, 84 open issues |
+| Coverage (overall) | 15.2% |
+
+The gate is evaluated on **New Code** — code added or changed inside the New
+Code period. The letter ratings are evaluated on the **whole codebase**,
+including everything written before this pipeline existed. A project can
+therefore pass its gate on every new line while still carrying a poor overall
+rating, and that is exactly the state here. The 80.1% figure reported above is
+`new_coverage`; overall coverage is 15.2%.
+
+This has to be stated plainly, because an examiner who opens the project page
+will read "Security E" as contradicting any claim that the application was
+remediated.
+
+### What the 13 open security issues are
+
+| Rule | Severity | Count | Location | Status |
+|---|---|---|---|---|
+| `jssecurity:S5147` | BLOCKER | 8 | `routes/orderRoutes.js` 26, 33, 266, 273; `routes/productRoutes.js` 78, 96, 115, 126 | False positive, **not yet marked on `main`** |
+| `jssecurity:S5145` | MINOR | 4 | `monitor-server.js` 96, 97, 101, 106 | Remediated 2026-10-02 |
+| `javascript:S5542` | CRITICAL | 1 | `utils/encryption.js` 47 | Accepted, documented |
+
+**The 8 `S5147` are the same false-positive class described in the next
+section**, not new findings. Every flagged call site is guarded before the
+value reaches the Mongoose filter — `asEnum(status, ORDER_STATUSES)` in
+`orderRoutes.js`, and `asString` / `asSafeSearchRegex` in `productRoutes.js`.
+Sonar's taint analysis does not track sanitisation through a custom function,
+so it still reports the flow from `req.query` to `find()`.
+
+They are unmarked on `main` for a mechanical reason worth recording: the two
+`authRoutes.js` issues were marked False Positive **on the pull request
+analysis**, and a PR analysis is a separate entity from the branch analysis.
+Resolutions applied to a PR do not transfer to `main` when it merges. Marking
+on a PR is enough to let that PR through its gate and no more.
+
+**This is a finding about the tool, not a loose end in the application.** A
+reviewer who triages findings on pull requests, as the obvious workflow
+suggests, will watch the branch rating stay bad while believing the work was
+done. Triage has to be repeated on the long-lived branch.
+
+### The 4 `S5145` were a real gap, and are fixed
+
+`monitor-server.js` interpolated fields from the monitored `/health` response
+straight into `console.log` and `console.warn`. The `forLog` sanitiser existed
+in `utils/sanitize.js` and had been applied across the request-handling code,
+but this file was never covered — it is a standalone script rather than part of
+the server, so it was missed.
+
+The exposure is second-order: the taint source is the monitored service rather
+than a request, so it needs the health endpoint to be returning attacker-
+influenced data. That makes it MINOR rather than ignorable — a control
+character in a health field could forge log lines and mask a real failure,
+which matters in a file whose only job is to report failures.
+
 ## Known false positives, marked in SonarCloud
 
 Two `jssecurity:S5147` (NoSQL injection, BLOCKER) findings at
