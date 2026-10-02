@@ -68,9 +68,13 @@ spec:
               containerPort: 5000
               protocol: TCP
           securityContext:
-            allowPrivilegeEscalation: false
-            privileged: false
-            readOnlyRootFilesystem: true
+            # SEED-IAC-01: deliberately weakened container security context.
+            # allowPrivilegeEscalation and privileged both flipped, and the
+            # root filesystem made writable. Expected to be caught by Checkov
+            # at the Build stage (CKV_K8S_20, CKV_K8S_16, CKV_K8S_22).
+            allowPrivilegeEscalation: true
+            privileged: true
+            readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 10001
             capabilities:
