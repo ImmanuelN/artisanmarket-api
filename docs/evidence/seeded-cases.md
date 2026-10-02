@@ -7,24 +7,40 @@ from the claim that the pipeline executes end to end, which is evidenced in
 
 ## Method
 
-Each case is a single commit branched from tag `evidence/end-to-end-green`
-(`8eda0eb689ba53145090d67f2dbbad6d1199bceb`) — the commit verified green through
-all six stages. Each is raised as a pull request against `staging`, so the full
-deep-scan tier runs and every gate has the opportunity to fire.
+Each case is a branch carrying one deliberate defect, raised as a pull request
+against `staging` so the full deep-scan tier runs and every gate has the
+opportunity to fire.
 
-Because each branch differs from the green baseline by exactly one deliberate
+The cases were built in three rounds, as the pipeline itself was completed, so
+they do not share a single baseline. Each branch is cut from whichever commit
+was the verified-green tip at the time, and the isolation argument is made
+against *that* commit:
+
+| Baseline | Tag | Cases cut from it |
+|---|---|---|
+| `3266bab` | none — the commit that recorded the end-to-end run, a descendant of `evidence/end-to-end-green` | SEED-SAST-01, SEED-SECRET-01, SEED-DAST-01 |
+| `ac035d2` | `evidence/sca-gate-blocking` | SEED-SCA-01 |
+| `3e53799` | `evidence/all-gates-green` | SEED-IAC-01, SEED-IMAGE-01, SEED-SONAR-01 |
+
+Because each branch differs from *its own* baseline by exactly one deliberate
 change, any gate that fires is attributable to that change alone. No case
 depends on a pre-existing failure.
 
-| Case | Branch | PR | Diff vs baseline |
-|---|---|---|---|
-| SEED-SAST-01 | `seed/sast-01` | [#3](https://github.com/ImmanuelN/artisanmarket-api/pull/3) | 1 file, +3 / −1 |
-| SEED-SECRET-01 | `seed/secret-01` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) | 1 file, +15 |
-| SEED-DAST-01 | `seed/dast-01` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) | 1 file, +10 / −4 |
-| SEED-SCA-01 | `seed/sca-01` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) | 2 files (manifest + lockfile only) |
-| SEED-IAC-01 | `seed/iac-01` | [#11](https://github.com/ImmanuelN/artisanmarket-api/pull/11) | 1 file deleted |
-| SEED-IMAGE-01 | `seed/image-01` | [#12](https://github.com/ImmanuelN/artisanmarket-api/pull/12) | 1 file, +5 / −2 |
-| SEED-SONAR-01 | `seed/sonar-01` | [#13](https://github.com/ImmanuelN/artisanmarket-api/pull/13) | 1 file, +12 / −3 |
+| Case | Branch | PR | Baseline | Net diff vs baseline |
+|---|---|---|---|---|
+| SEED-SAST-01 | `seed/sast-01` | [#3](https://github.com/ImmanuelN/artisanmarket-api/pull/3) | `3266bab` | 1 file, +3 / −1 |
+| SEED-SECRET-01 | `seed/secret-01` | [#4](https://github.com/ImmanuelN/artisanmarket-api/pull/4) | `3266bab` | 1 file, +19 |
+| SEED-DAST-01 | `seed/dast-01` | [#5](https://github.com/ImmanuelN/artisanmarket-api/pull/5) | `3266bab` | 1 file, +10 / −4 |
+| SEED-SCA-01 | `seed/sca-01` | [#7](https://github.com/ImmanuelN/artisanmarket-api/pull/7) | `ac035d2` | 2 files — manifest and lockfile only |
+| SEED-IAC-01 | `seed/iac-01` | [#11](https://github.com/ImmanuelN/artisanmarket-api/pull/11) | `3e53799` | 2 files, +1 / −71 — NetworkPolicy deleted |
+| SEED-IMAGE-01 | `seed/image-01` | [#12](https://github.com/ImmanuelN/artisanmarket-api/pull/12) | `3e53799` | 1 file, +5 / −2 |
+| SEED-SONAR-01 | `seed/sonar-01` | [#13](https://github.com/ImmanuelN/artisanmarket-api/pull/13) | `3e53799` | 1 file, +12 / −3 |
+
+`seed/iac-01` is the only branch with two commits. The abandoned first attempt
+(`7558f7f`, described under "Two cases had to be re-seeded") is kept on the
+branch for the record, and the re-seed commit reverts it — `k8s/deployment.yaml`
+is byte-identical to the baseline at the branch tip. The net diff above is what
+PR #11 actually scans, and it carries one defect.
 
 ## Results
 

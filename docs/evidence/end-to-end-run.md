@@ -21,8 +21,13 @@ separately by the seeded-case runs.
 The `pull_request` event with base `main` resolves `production=true`, so all six
 stages execute without modifying `main`.
 
-![All six stages green](screenshots/pipeline-six-stages-green.png)
-*GitHub Actions — the six-stage model running end to end. See `screenshots/README.md` for capture instructions.*
+> **Screenshot pending — `screenshots/pipeline-six-stages-green.png`.**
+> *GitHub Actions — the six-stage model running end to end.*
+> Capture instructions are in `screenshots/README.md`. Once the file is
+> committed, delete this block and uncomment the embed below it.
+
+<!-- ![All six stages green](screenshots/pipeline-six-stages-green.png) -->
+<!-- *GitHub Actions — the six-stage model running end to end.* -->
 
 ## Stage results
 
