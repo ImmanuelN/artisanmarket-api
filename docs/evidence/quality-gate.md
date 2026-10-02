@@ -170,6 +170,38 @@ reviewer who triages findings on pull requests, as the obvious workflow
 suggests, will watch the branch rating stay bad while believing the work was
 done. Triage has to be repeated on the long-lived branch.
 
+### A passing pull request is not a passing branch
+
+The commit that remediated the `S5145` sites passed its pull-request gate and
+then **failed the gate on `main`**:
+
+| | `new_coverage` | Gate |
+|---|---|---|
+| PR #17 analysis | measured on the PR diff | **OK** |
+| `main` analysis after merge | 78.3% | **ERROR** |
+
+The two analyses measure different things. A pull-request analysis scores the
+diff; a branch analysis scores the whole **New Code period**, which here held
+1,502 lines and 180 coverable units. Four new uncovered lines in
+`monitor-server.js` were immaterial to the diff and enough to move the branch
+from 80.1% to 78.3% — three covered units short of the threshold:
+
+```
+covered lines      82 / 112
+covered conditions 59 / 68
+new_coverage       141 / 180 = 78.3%   (80% needs 144)
+```
+
+**This is the same distinction that strands the false-positive markings**
+described above, showing up a second time through a different symptom. Stated
+generally: *resolutions and results on a pull request do not describe the
+branch it merges into.* A project that gates only on pull requests will drift
+on the branch that actually ships, and will find out at merge time.
+
+The practical consequence for this pipeline is that a green PR is necessary but
+not sufficient, and `main` has to be watched after every merge. That is an
+argument for the Monitor stage rather than against the gate.
+
 ### The 4 `S5145` were a real gap, and are fixed
 
 `monitor-server.js` interpolated fields from the monitored `/health` response
@@ -183,6 +215,18 @@ than a request, so it needs the health endpoint to be returning attacker-
 influenced data. That makes it MINOR rather than ignorable — a control
 character in a health field could forge log lines and mask a real failure,
 which matters in a file whose only job is to report failures.
+
+The remediation is in two parts, because patching the four lines in place
+reproduced the condition that hid them. `monitor-server.js` calls
+`setInterval` and registers signal handlers at module scope, so importing it
+starts the monitor and no test can load it. The formatting and sanitisation now
+live in `utils/healthReport.js` as pure functions over a plain object, covered
+by `tests/healthReport.test.js` at 15/15 lines and 17/17 branches, including
+the log-forging cases directly. `monitor-server.js` keeps only transport.
+
+That is the durable fix: the file was not missed through oversight but because
+it was unreachable from the suite, and only moving the logic somewhere
+reachable changes that.
 
 ## Known false positives, marked in SonarCloud
 
