@@ -23,13 +23,8 @@ The project passes SonarCloud's **unmodified default gate**, *Sonar way*:
 
 No condition was relaxed and no paid feature was used.
 
-> **Screenshot pending — `screenshots/sonar-gate-passed-api.png`.**
-> *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
-> Capture instructions are in `screenshots/README.md`. Once the file is
-> committed, delete this block and uncomment the embed below it.
-
-<!-- ![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png) -->
-<!-- *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.* -->
+![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png)
+*SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
 
 ### Why not a custom gate
 
@@ -250,3 +245,7 @@ This is a reportable result in its own right: SAST false positives survive
 correct remediation when the analyser cannot see the sanitiser, and a process
 requiring every finding to reach zero will eventually pressure engineers into
 contorting working code.
+
+![An S5147 finding marked False Positive with its justification](screenshots/sonar-false-positive.png)
+*The resolution carries a written justification. That is what separates an
+analysed finding from a suppressed one, and it is the part a reviewer reads.*

@@ -1,0 +1,19 @@
+{
+  "$comment": [
+    "Advisories accepted for the dependency gate (scripts/audit-gate.mjs).",
+    "An entry here is not a dismissal: the advisory is still scanned and still",
+    "printed on every run. It expires on reviewBy, and the build fails once that",
+    "date passes, so an acceptance cannot quietly become permanent.",
+    "Add an entry only when there is no released fix. If a fix exists, take it."
+  ],
+  "accepted": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "severity": "high",
+      "reason": "Stack-exhaustion denial of service through deeply nested glob patterns. Affects every published version of braces (the advisory range is '*'), so there is no release to upgrade to. It reaches this tree only through jest and nodemon, both devDependencies, and the pattern that would trigger it is the project's own test and watch configuration rather than anything a request can influence. The production image is built with `npm ci --omit=dev`, so braces is absent from the deployed artefact. Accepted rather than scoping the audit to --omit=dev, which would silently drop supply-chain coverage of all build tooling and not just this advisory.",
+      "acceptedOn": "2026-10-05",
+      "reviewBy": "2026-12-05"
+    }
+  ]
+}

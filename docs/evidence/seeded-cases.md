@@ -61,6 +61,48 @@ Screenshots of each blocked run are listed in `screenshots/README.md`; capture
 them with the failing stage name visible, since which gate caught the defect is
 the evidence, not that the run was red.
 
+## Screenshots of each blocked run
+
+### SEED-SAST-01
+
+![SEED-SAST-01 blocked at Code · SAST + secret scanning](screenshots/seed-sast-01-blocked.png)
+*Blocked at **Code · SAST + secret scanning**. ESLint fires on the credential fallback; Gitleaks passes in the same run.*
+
+### SEED-SECRET-01
+
+![SEED-SECRET-01 blocked at Code · SAST + secret scanning](screenshots/seed-secret-01-blocked.png)
+*Blocked at **Code · SAST + secret scanning**. Gitleaks fires on the committed secret; ESLint passes in the same run.*
+
+### SEED-DAST-01
+
+![SEED-DAST-01 blocked at Staging · DAST](screenshots/seed-dast-01-blocked.png)
+*Blocked at **Staging · DAST**. Code and Build pass in full; only the running-application scan observes the removed header.*
+
+### SEED-SCA-01
+
+![SEED-SCA-01 blocked at Build · SCA + container + IaC scanning](screenshots/seed-sca-01-blocked.png)
+*Blocked at **Build · SCA + container + IaC scanning**. Trivy fires on the downgraded multer while npm audit passes — the two databases disagree.*
+
+### SEED-IAC-01
+
+![SEED-IAC-01 blocked at Build · SCA + container + IaC scanning](screenshots/seed-iac-01-blocked.png)
+*Blocked at **Build · SCA + container + IaC scanning**. Checkov fires on the deleted NetworkPolicy while SonarQube passes, which is what isolates the graph check.*
+
+### SEED-IMAGE-01
+
+![SEED-IMAGE-01 blocked at Build · SCA + container + IaC scanning](screenshots/seed-image-01-blocked.png)
+*Blocked at **Build · SCA + container + IaC scanning**. The image scan fires on the outdated base; the dependency and IaC scanners pass.*
+
+### SEED-SONAR-01
+
+![SEED-SONAR-01 blocked at Code · SAST + secret scanning](screenshots/seed-sonar-01-blocked.png)
+*Blocked at **Code · SAST + secret scanning**. SonarQube fires on the mass assignment while ESLint, Gitleaks, npm audit and 102 tests all pass.*
+
+Each image shows the failing check together with the checks that passed, so
+what the gate caught is readable from the figure rather than asserted beside
+it. The stages after the failing one show as skipped because the `needs` chain
+stops them; see the attribution caveat under "Scope limit".
+
 ## Isolation
 
 The two Code-stage cases cross over cleanly. Each scanner fires on its own defect

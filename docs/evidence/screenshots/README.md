@@ -13,6 +13,21 @@ rather than capturing the whole page.
 > repositories in a sidebar, email addresses in an account menu. Crop or blur
 > rather than publishing them into a thesis appendix.
 
+## Status
+
+| File | State |
+|---|---|
+| `sonar-gate-passed-api.png` | captured, embedded in `quality-gate.md` |
+| `sonar-coverage-api.png` | **not captured** — the one gap |
+| `sonar-overview-api.png` | captured, embedded in `end-to-end-run.md` |
+| `sonar-false-positive.png` | captured, embedded in `quality-gate.md` |
+| `pipeline-six-stages-green.png` | captured, embedded in `end-to-end-run.md` |
+| `seed-*-blocked.png` (7) | captured, embedded in `seeded-cases.md` |
+
+Everything below is kept as the capture record. Two files arrived named
+`*.png.png` and were renamed; save as `name.png`, not `name.png.png`, or the
+embed will not resolve.
+
 ---
 
 ## 1. `sonar-gate-passed-api.png`
