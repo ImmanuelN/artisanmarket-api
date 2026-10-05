@@ -18,7 +18,7 @@ rather than capturing the whole page.
 | File | State |
 |---|---|
 | `sonar-gate-passed-api.png` | captured, embedded in `quality-gate.md` |
-| `sonar-coverage-api.png` | **not captured** — the one gap |
+| `sonar-coverage-api.png` | captured, embedded in `quality-gate.md` |
 | `sonar-overview-api.png` | captured, embedded in `end-to-end-run.md` |
 | `sonar-false-positive.png` | captured, embedded in `quality-gate.md` |
 | `pipeline-six-stages-green.png` | captured, embedded in `end-to-end-run.md` |

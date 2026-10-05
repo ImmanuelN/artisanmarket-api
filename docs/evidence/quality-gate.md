@@ -58,13 +58,11 @@ The project had no tests when SonarQube was wired in, so `new_coverage` was 0%.
 | Remaining route paths | 77.8% |
 | Targeted tests on the last uncovered lines | **80.1%** |
 
-> **Screenshot pending — `screenshots/sonar-coverage-api.png`.**
-> *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.*
-> Capture instructions are in `screenshots/README.md`. Once the file is
-> committed, delete this block and uncomment the embed below it.
-
-<!-- ![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png) -->
-<!-- *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.* -->
+![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png)
+*Coverage on New Code, `artisanmarket-api` PR #10 — 80.11% on 108 new lines to
+cover, against the 80% threshold. The margin was 0.11 points, which is why four
+uncovered lines added later were enough to fail the gate on `main`; see "A
+passing pull request is not a passing branch".*
 
 
 **102 tests across 7 files.** They assert security properties rather than
