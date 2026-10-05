@@ -24,6 +24,7 @@ export default {
     'utils/**/*.js',
     'middleware/**/*.js',
     'routes/**/*.js',
+    'scripts/**/*.js',
     '!**/node_modules/**'
   ],
   coverageReporters: ['text-summary', 'lcov'],

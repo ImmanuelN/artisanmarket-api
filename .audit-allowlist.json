@@ -1,6 +1,6 @@
 {
   "$comment": [
-    "Advisories accepted for the dependency gate (scripts/audit-gate.mjs).",
+    "Advisories accepted for the dependency gate (scripts/audit-gate.js).",
     "An entry here is not a dismissal: the advisory is still scanned and still",
     "printed on every run. It expires on reviewBy, and the build fails once that",
     "date passes, so an acceptance cannot quietly become permanent.",

@@ -154,7 +154,7 @@ jobs:
       - run: npm ci --ignore-scripts
       # Blocking, on the FULL dependency tree including devDependencies.
       #
-      # scripts/audit-gate.mjs wraps `npm audit` so that a single advisory can
+      # scripts/audit-gate.js wraps `npm audit` so that a single advisory can
       # be accepted explicitly, in .audit-allowlist.json, with a reason and a
       # review date. npm itself offers only two options once an advisory has no
       # released fix — block on everything, or scan less — and scanning less
@@ -166,8 +166,15 @@ jobs:
       #
       # Two moderate advisories remain (imagekit and its transitive uuid) and
       # sit below this threshold; see docs/threat-model.md.
+      #
+      # npm audit exits non-zero whenever it finds anything, so its exit code is
+      # discarded and the decision is made by the gate. The gate fails closed:
+      # empty, malformed or error output — a registry outage, say — is a
+      # failure, never a clean tree.
       - name: Dependency audit
-        run: node scripts/audit-gate.mjs --level=high
+        run: |
+          npm audit --json > npm-audit.json || true
+          node scripts/audit-gate.js npm-audit.json --level=high
 
   # ---- Build (4.3.4, 4.3.5, 4.3.6): deep SCA + container + IaC — staging and main only ----
   build-security:
