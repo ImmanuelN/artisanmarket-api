@@ -178,3 +178,6 @@ docker-compose.override.yml
 *.bak
 *.backup
 *.tmp
+
+# Dependency gate input, generated in CI
+npm-audit.json

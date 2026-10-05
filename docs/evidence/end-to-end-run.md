@@ -21,13 +21,9 @@ separately by the seeded-case runs.
 The `pull_request` event with base `main` resolves `production=true`, so all six
 stages execute without modifying `main`.
 
-> **Screenshot pending — `screenshots/pipeline-six-stages-green.png`.**
-> *GitHub Actions — the six-stage model running end to end.*
-> Capture instructions are in `screenshots/README.md`. Once the file is
-> committed, delete this block and uncomment the embed below it.
-
-<!-- ![All six stages green](screenshots/pipeline-six-stages-green.png) -->
-<!-- *GitHub Actions — the six-stage model running end to end.* -->
+![All six stages green](screenshots/pipeline-six-stages-green.png)
+*GitHub Actions, run #58 — the six-stage model executing end to end. All
+eight jobs green, with the stage graph showing the promotion chain.*
 
 ## Stage results
 
@@ -136,6 +132,14 @@ This is the eighth instance of the same underlying issue and the second
 independent one, which is worth stating as a finding in its own right: in
 GitHub Actions, step-level failure semantics silently narrow scanner coverage,
 and each stage must be checked for it separately.
+
+## SonarCloud project state
+
+![SonarCloud project overview](screenshots/sonar-overview-api.png)
+*SonarCloud project overview. Read it alongside "Overall ratings versus the
+gate" in `quality-gate.md`: the gate reads Passed on New Code while the letter
+ratings score the whole codebase, including everything written before this
+pipeline existed.*
 
 ## Defects found by reaching each stage
 

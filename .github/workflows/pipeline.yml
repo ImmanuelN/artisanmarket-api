@@ -152,13 +152,29 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci --ignore-scripts
-      # Blocking. The dependency tree carries no critical or high advisories:
-      # npm audit fix cleared the non-breaking ones, and cloudinary and
-      # nodemailer were removed outright as unused dependencies. Two moderate
-      # advisories remain (imagekit and its transitive uuid) and sit below this
-      # threshold; see docs/threat-model.md.
+      # Blocking, on the FULL dependency tree including devDependencies.
+      #
+      # scripts/audit-gate.js wraps `npm audit` so that a single advisory can
+      # be accepted explicitly, in .audit-allowlist.json, with a reason and a
+      # review date. npm itself offers only two options once an advisory has no
+      # released fix — block on everything, or scan less — and scanning less
+      # drops supply-chain coverage of all build tooling, not just the advisory
+      # that prompted it. Accepted advisories are still scanned and still
+      # printed. The gate fails when a finding is not listed, when an acceptance
+      # has passed its review date, and when a listed entry no longer matches
+      # anything, so the file cannot silently rot.
+      #
+      # Two moderate advisories remain (imagekit and its transitive uuid) and
+      # sit below this threshold; see docs/threat-model.md.
+      #
+      # npm audit exits non-zero whenever it finds anything, so its exit code is
+      # discarded and the decision is made by the gate. The gate fails closed:
+      # empty, malformed or error output — a registry outage, say — is a
+      # failure, never a clean tree.
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        run: |
+          npm audit --json > npm-audit.json || true
+          node scripts/audit-gate.js npm-audit.json --level=high
 
   # ---- Build (4.3.4, 4.3.5, 4.3.6): deep SCA + container + IaC — staging and main only ----
   build-security:

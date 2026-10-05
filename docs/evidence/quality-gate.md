@@ -23,13 +23,8 @@ The project passes SonarCloud's **unmodified default gate**, *Sonar way*:
 
 No condition was relaxed and no paid feature was used.
 
-> **Screenshot pending — `screenshots/sonar-gate-passed-api.png`.**
-> *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
-> Capture instructions are in `screenshots/README.md`. Once the file is
-> committed, delete this block and uncomment the embed below it.
-
-<!-- ![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png) -->
-<!-- *SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.* -->
+![SonarCloud quality gate passing on PR #10](screenshots/sonar-gate-passed-api.png)
+*SonarCloud quality gate, `artisanmarket-api` PR #10 — all six conditions green on the default Sonar way gate.*
 
 ### Why not a custom gate
 
@@ -63,13 +58,11 @@ The project had no tests when SonarQube was wired in, so `new_coverage` was 0%.
 | Remaining route paths | 77.8% |
 | Targeted tests on the last uncovered lines | **80.1%** |
 
-> **Screenshot pending — `screenshots/sonar-coverage-api.png`.**
-> *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.*
-> Capture instructions are in `screenshots/README.md`. Once the file is
-> committed, delete this block and uncomment the embed below it.
-
-<!-- ![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png) -->
-<!-- *Coverage on New Code, `artisanmarket-api` PR #10 — 80.1% against the 80% threshold.* -->
+![Coverage on new code reaching 80.1%](screenshots/sonar-coverage-api.png)
+*Coverage on New Code, `artisanmarket-api` PR #10 — 80.11% on 108 new lines to
+cover, against the 80% threshold. The margin was 0.11 points, which is why four
+uncovered lines added later were enough to fail the gate on `main`; see "A
+passing pull request is not a passing branch".*
 
 
 **102 tests across 7 files.** They assert security properties rather than
@@ -228,6 +221,32 @@ That is the durable fix: the file was not missed through oversight but because
 it was unreachable from the suite, and only moving the logic somewhere
 reachable changes that.
 
+## The gate holds its own tooling to the same standard (2026-10-05)
+
+`scripts/audit-gate.js` was written to keep the dependency gate blocking when
+an advisory has no released fix (see the workflow comment and
+`.audit-allowlist.json`). Its first version failed the SonarQube gate on its own
+pull request:
+
+| Finding | Severity | Cause |
+|---|---|---|
+| `javascript:S4036` | MINOR vulnerability | spawned `npm` by name, resolved through `PATH` |
+| `javascript:S2871` | CRITICAL bug | `.sort()` with no comparator |
+| `new_coverage` 0% | gate condition | the script had no tests |
+
+None was fixed by exempting `scripts/` from analysis. The script now reads the
+`npm audit --json` report from a file instead of spawning anything, which
+removes the `PATH` lookup and turns the decision into a pure function of its
+input. That is also what made it testable: `tests/auditGate.test.js` covers
+102 of 105 lines, the three uncovered being the command-line entry point, and
+concentrates on the cases where the gate must *not* pass — an unlisted
+finding, an expired or stale acceptance, and empty, malformed or error output
+from npm, since the pipeline has to discard npm audit's own exit code.
+
+The point for the evaluation is that the controls are not special-cased.
+Code written to administer a gate went through the same gate, failed it for
+ordinary reasons, and was fixed the ordinary way.
+
 ## Known false positives, marked in SonarCloud
 
 Two `jssecurity:S5147` (NoSQL injection, BLOCKER) findings at
@@ -250,3 +269,7 @@ This is a reportable result in its own right: SAST false positives survive
 correct remediation when the analyser cannot see the sanitiser, and a process
 requiring every finding to reach zero will eventually pressure engineers into
 contorting working code.
+
+![An S5147 finding marked False Positive with its justification](screenshots/sonar-false-positive.png)
+*The resolution carries a written justification. That is what separates an
+analysed finding from a suppressed one, and it is the part a reviewer reads.*
