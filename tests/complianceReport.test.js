@@ -1,5 +1,6 @@
 import {
   CONTROLS,
+  parseControlTable,
   EXPIRY_WARNING_DAYS,
   classify,
   evaluate,
@@ -27,6 +28,30 @@ const allowlist = (reviewBy) =>
   JSON.stringify({
     accepted: [{ id: 'GHSA-vfj7-8cjw-p6xm', package: 'braces', severity: 'high', reviewBy }]
   })
+
+describe('the control table', () => {
+  test('every row parses into a complete control with a unique outcome variable', () => {
+    expect(CONTROLS).toHaveLength(12)
+    for (const c of CONTROLS) {
+      for (const field of ['id', 'stage', 'control', 'tool', 'env']) expect(c[field]).toBeTruthy()
+      expect(c.env).toMatch(/^OUTCOME_[A-Z_]+$/)
+      expect(c.pci.every(Boolean)).toBe(true)
+      expect(c.gdpr.every(Boolean)).toBe(true)
+    }
+    expect(new Set(CONTROLS.map((c) => c.env)).size).toBe(CONTROLS.length)
+    expect(new Set(CONTROLS.map((c) => c.id)).size).toBe(CONTROLS.length)
+  })
+
+  test('only Snyk is optional', () => {
+    expect(CONTROLS.filter((c) => !c.required).map((c) => c.id)).toEqual(['snyk'])
+  })
+
+  test('splits multi-requirement cells and attaches notes by id', () => {
+    const [row] = parseControlTable('dast | S | C | T | OUTCOME_X | required | 1.1, 2.2 | Art. 1')
+    expect(row.pci).toEqual(['1.1', '2.2'])
+    expect(row.note).toMatch(/6.4.2/)
+  })
+})
 
 describe('classify', () => {
   test.each([

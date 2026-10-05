@@ -30,75 +30,56 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs
 import { pathToFileURL } from 'node:url'
 
 /**
- * Every control the pipeline runs, in stage order. `env` names the environment
- * variable carrying that step's outcome. A control that is not `required` is
- * reported but does not affect the verdict.
+ * The control-to-requirement mapping, written as a table so it can be reviewed
+ * as one. Columns:
+ *
+ *   id | stage | control | tool | outcome variable | required/optional | PCI DSS v4.0.1 | GDPR
+ *
+ * The outcome variable is set by the workflow from that control's own step
+ * outcome. An optional control is reported but does not affect the verdict.
  */
-export const CONTROLS = [
-  {
-    id: 'threat-model', stage: 'Plan', control: 'Threat model present', tool: 'docs/threat-model.md',
-    env: 'OUTCOME_THREAT_MODEL', required: true,
-    pci: ['6.2.1'], gdpr: ['Art. 25(1)']
-  },
-  {
-    id: 'eslint', stage: 'Code', control: 'Security lint ruleset', tool: 'ESLint',
-    env: 'OUTCOME_ESLINT', required: true,
-    pci: ['6.2.4'], gdpr: ['Art. 25(1)']
-  },
-  {
-    id: 'tests', stage: 'Code', control: 'Security regression tests', tool: 'Jest / Vitest',
-    env: 'OUTCOME_TESTS', required: true,
-    pci: ['6.2.4'], gdpr: ['Art. 32(1)(d)']
-  },
-  {
-    id: 'gitleaks', stage: 'Code', control: 'Secret scanning', tool: 'Gitleaks',
-    env: 'OUTCOME_GITLEAKS', required: true,
-    pci: ['8.6.2'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'sast', stage: 'Code', control: 'Static analysis and quality gate', tool: 'SonarQube (SonarCloud)',
-    env: 'OUTCOME_SAST', required: true,
-    pci: ['6.2.3', '6.2.4'], gdpr: ['Art. 25(1)']
-  },
-  {
-    id: 'sca', stage: 'Code', control: 'Dependency audit', tool: 'npm audit + audit gate',
-    env: 'OUTCOME_SCA', required: true,
-    pci: ['6.3.1', '6.3.3'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'snyk', stage: 'Build', control: 'Dependency analysis (optional)', tool: 'Snyk',
-    env: 'OUTCOME_SNYK', required: false,
-    pci: ['6.3.1'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'trivy-fs', stage: 'Build', control: 'Dependency and config scan', tool: 'Trivy (filesystem)',
-    env: 'OUTCOME_TRIVY_FS', required: true,
-    pci: ['6.3.1', '6.3.2'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'trivy-image', stage: 'Build', control: 'Container image scan', tool: 'Trivy (image)',
-    env: 'OUTCOME_TRIVY_IMAGE', required: true,
-    pci: ['6.3.1', '6.3.3'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'iac', stage: 'Build', control: 'Infrastructure-as-code scan', tool: 'Checkov',
-    env: 'OUTCOME_IAC', required: true,
-    pci: ['1.3.1', '2.2.1'], gdpr: ['Art. 32(1)(b)']
-  },
-  {
-    id: 'dast', stage: 'Staging', control: 'Dynamic scan of the running app', tool: 'OWASP ZAP (baseline)',
-    env: 'OUTCOME_DAST', required: true,
-    pci: ['6.2.4'], gdpr: ['Art. 32(1)(d)'],
-    note:
-      'A baseline scan supports, but does not satisfy, PCI DSS 6.4.2, which requires an automated ' +
-      'technical solution that continually detects and prevents web-based attacks.'
-  },
-  {
-    id: 'release-gate', stage: 'Deploy', control: 'Release gate', tool: 'needs chain',
-    env: 'OUTCOME_RELEASE_GATE', required: true,
-    pci: ['6.5.1'], gdpr: ['Art. 32(1)(d)']
-  }
-]
+const CONTROL_TABLE = `
+threat-model | Plan    | Threat model present             | docs/threat-model.md   | OUTCOME_THREAT_MODEL | required | 6.2.1        | Art. 25(1)
+eslint       | Code    | Security lint ruleset            | ESLint                 | OUTCOME_ESLINT       | required | 6.2.4        | Art. 25(1)
+tests        | Code    | Security regression tests        | Jest / Vitest          | OUTCOME_TESTS        | required | 6.2.4        | Art. 32(1)(d)
+gitleaks     | Code    | Secret scanning                  | Gitleaks               | OUTCOME_GITLEAKS     | required | 8.6.2        | Art. 32(1)(b)
+sast         | Code    | Static analysis and quality gate | SonarQube (SonarCloud) | OUTCOME_SAST         | required | 6.2.3, 6.2.4 | Art. 25(1)
+sca          | Code    | Dependency audit                 | npm audit + audit gate | OUTCOME_SCA          | required | 6.3.1, 6.3.3 | Art. 32(1)(b)
+snyk         | Build   | Dependency analysis              | Snyk                   | OUTCOME_SNYK         | optional | 6.3.1        | Art. 32(1)(b)
+trivy-fs     | Build   | Dependency and config scan       | Trivy (filesystem)     | OUTCOME_TRIVY_FS     | required | 6.3.1, 6.3.2 | Art. 32(1)(b)
+trivy-image  | Build   | Container image scan             | Trivy (image)          | OUTCOME_TRIVY_IMAGE  | required | 6.3.1, 6.3.3 | Art. 32(1)(b)
+iac          | Build   | Infrastructure-as-code scan      | Checkov                | OUTCOME_IAC          | required | 1.3.1, 2.2.1 | Art. 32(1)(b)
+dast         | Staging | Dynamic scan of the running app  | OWASP ZAP (baseline)   | OUTCOME_DAST         | required | 6.2.4        | Art. 32(1)(d)
+release-gate | Deploy  | Release gate                     | needs chain            | OUTCOME_RELEASE_GATE | required | 6.5.1        | Art. 32(1)(d)
+`
+
+/** Caveats attached to individual controls, rendered beneath the table. */
+const NOTES = {
+  dast:
+    'A baseline scan supports, but does not satisfy, PCI DSS 6.4.2, which requires an automated ' +
+    'technical solution that continually detects and prevents web-based attacks.'
+}
+
+const list = (cell) => cell.split(',').map((x) => x.trim())
+
+/**
+ * Parse the control table. Exported so a test can check every row is complete:
+ * a malformed row would otherwise silently drop a control from the report.
+ */
+export function parseControlTable(text) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, stage, control, tool, env, need, pci, gdpr] = line.split('|').map((cell) => cell.trim())
+      const parsed = { id, stage, control, tool, env, required: need === 'required', pci: list(pci), gdpr: list(gdpr) }
+      return NOTES[id] ? { ...parsed, note: NOTES[id] } : parsed
+    })
+}
+
+/** Every control the pipeline runs, in stage order. */
+export const CONTROLS = parseControlTable(CONTROL_TABLE)
 
 /** Days before a review date at which an acceptance is flagged. */
 export const EXPIRY_WARNING_DAYS = 14
@@ -159,15 +140,13 @@ export function acceptedRisks(allowlistText, today) {
   })
 }
 
-/** Render the report as Markdown, for the job summary and the stored artifact. */
-export function renderMarkdown(result, risks, meta) {
-  const lines = [
-    `## Compliance report — ${meta.repository ?? 'repository'} @ \`${(meta.sha ?? '').slice(0, 7)}\``,
-    '',
-    `Trigger: **${meta.event ?? 'unknown'}** · Ref: \`${meta.ref ?? ''}\` · Date: ${meta.today}`,
-    ''
-  ]
+const FOOTER =
+  '_Indicative alignment only. Each automated control supports part of the requirement cited; ' +
+  'none satisfies a requirement on its own, and PCI DSS compliance is assessed against the full ' +
+  'standard, most of which no pipeline can evidence. This is not a compliance attestation._'
 
+function verdictLines(result, event) {
+  const lines = []
   if (result.verdict === 'pass') {
     lines.push(`**All ${result.controls.filter((c) => c.required).length} required controls passed.**`)
   } else {
@@ -176,52 +155,64 @@ export function renderMarkdown(result, risks, meta) {
     if (result.notRun.length) parts.push(`${result.notRun.length} did not run`)
     lines.push(`**Posture not satisfied: ${parts.join(', ')}.**`)
   }
-  if (meta.event === 'schedule') {
+  if (event === 'schedule') {
     lines.push(
       '',
       'This is a scheduled re-verification of an unchanged commit. A control that fails here was ' +
         'broken by something outside the repository — typically a newly published vulnerability.'
     )
   }
+  return lines
+}
 
-  lines.push(
-    '',
-    '| Stage | Control | Tool | Result | PCI DSS v4.0.1 | GDPR |',
-    '|---|---|---|---|---|---|'
-  )
-  for (const c of result.controls) {
+function controlLines(controls) {
+  const rows = controls.map((c) => {
     const cell = c.required ? LABEL[c.status] : `${LABEL[c.status]} (optional)`
-    lines.push(`| ${c.stage} | ${c.control} | ${c.tool} | ${cell} | ${c.pci.join(', ')} | ${c.gdpr.join(', ')} |`)
-  }
+    return `| ${c.stage} | ${c.control} | ${c.tool} | ${cell} | ${c.pci.join(', ')} | ${c.gdpr.join(', ')} |`
+  })
+  const notes = controls.filter((c) => c.note).map((c) => `- **${c.control}:** ${c.note}`)
+  return [
+    '| Stage | Control | Tool | Result | PCI DSS v4.0.1 | GDPR |',
+    '|---|---|---|---|---|---|',
+    ...rows,
+    ...(notes.length ? ['', ...notes] : [])
+  ]
+}
 
-  const notes = result.controls.filter((c) => c.note)
-  if (notes.length) {
-    lines.push('')
-    for (const c of notes) lines.push(`- **${c.control}:** ${c.note}`)
-  }
+function riskStatus(r) {
+  if (r.state === 'expired') return `**expired ${-r.days} days ago**`
+  if (r.state === 'expiring') return `**${r.days} days left — review due**`
+  return `${r.days} days left`
+}
 
-  lines.push('', '### Accepted risks')
-  if (risks.length === 0) {
-    lines.push('', 'None. The dependency gate is currently accepting no advisories.')
-  } else {
-    lines.push('', '| Advisory | Package | Severity | Review by | Status |', '|---|---|---|---|---|')
-    for (const r of risks) {
-      let status = `${r.days} days left`
-      if (r.state === 'expired') status = `**expired ${-r.days} days ago**`
-      else if (r.state === 'expiring') status = `**${r.days} days left — review due**`
-      lines.push(`| ${r.id} | ${r.package} | ${r.severity} | ${r.reviewBy} | ${status} |`)
-    }
-  }
+function riskLines(risks) {
+  if (risks.length === 0) return ['None. The dependency gate is currently accepting no advisories.']
+  return [
+    '| Advisory | Package | Severity | Review by | Status |',
+    '|---|---|---|---|---|',
+    ...risks.map((r) => `| ${r.id} | ${r.package} | ${r.severity} | ${r.reviewBy} | ${riskStatus(r)} |`)
+  ]
+}
 
-  lines.push(
+/** Render the report as Markdown, for the job summary and the stored artifact. */
+export function renderMarkdown(result, risks, meta) {
+  return [
+    `## Compliance report — ${meta.repository ?? 'repository'} @ \`${(meta.sha ?? '').slice(0, 7)}\``,
+    '',
+    `Trigger: **${meta.event ?? 'unknown'}** · Ref: \`${meta.ref ?? ''}\` · Date: ${meta.today}`,
+    '',
+    ...verdictLines(result, meta.event),
+    '',
+    ...controlLines(result.controls),
+    '',
+    '### Accepted risks',
+    '',
+    ...riskLines(risks),
     '',
     '---',
     '',
-    '_Indicative alignment only. Each automated control supports part of the requirement cited; ' +
-      'none satisfies a requirement on its own, and PCI DSS compliance is assessed against the full ' +
-      'standard, most of which no pipeline can evidence. This is not a compliance attestation._'
-  )
-  return lines.join('\n') + '\n'
+    FOOTER
+  ].join('\n') + '\n'
 }
 
 /** Workflow annotations, so problems surface on the run page, not only in the summary. */
