@@ -1,7 +1,7 @@
 # Gitleaks configuration — ArtisanMarket API (Code stage, 4.3.3)
 #
-# The default rule set is kept in full; this file only records one narrowly
-# scoped exception.
+# The default rule set is kept in full; this file only records narrowly
+# scoped exceptions for literal placeholders, each justified below.
 #
 # Why it exists: on a pull_request event Gitleaks scans every commit in the PR
 # range, not just the head commit. docs/threat-model.md documents threat T3 by
@@ -17,10 +17,18 @@
 useDefault = true
 
 [allowlist]
-description = "Documented placeholder literal in the threat model, not a live credential"
+description = "Documented placeholder literals, not live credentials"
 regexes = [
   # Written with a character class so this file does not itself contain a
   # contiguous Stripe-format literal -- Trivy's secret scanner flags the raw
   # string even inside an allowlist. The regex still matches the placeholder.
   '''sk_test_pl[a]ceholder''',
+
+  # Placeholder bearer tokens in test-vendor-bank-curl.md, a curl how-to that
+  # has been in the tree since 2025-08-08. Push and pull-request scans only see
+  # the commits they introduce, so no scan examined this file until the
+  # scheduled full-history scan in the Monitor stage did. All eleven hits are
+  # these literal placeholder names; the exact names are listed, rather than
+  # the file or the curl-auth-header rule, so a real token still fails.
+  '''^(YOUR_VENDOR_TOKEN|CUSTOMER_TOKEN|INVALID_TOKEN)$''',
 ]
