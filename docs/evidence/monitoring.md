@@ -27,7 +27,7 @@ cancelled, or whose job never ran is `not run`, never `passed`.
 
 | Stage | Control | Tool | PCI DSS v4.0.1 | GDPR |
 |---|---|---|---|---|
-| Plan | Threat model present | `docs/threat-model.md` | 6.2.1 | Art. 25(1) |
+| Plan | Threat model gate | `docs/threat-model.md` (presence; Threat Dragon model pending) | 6.2.1 | Art. 25(1) |
 | Code | Security lint ruleset | ESLint | 6.2.4 | Art. 25(1) |
 | Code | Security regression tests | Jest | 6.2.4 | Art. 32(1)(d) |
 | Code | Secret scanning | Gitleaks | 8.6.2 | Art. 32(1)(b) |
