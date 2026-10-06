@@ -159,6 +159,12 @@ export function evaluate(report, allowlist, { minLevel = 'high', today }) {
     }
 
     for (const root of roots) {
+      // Judge each advisory on its own severity. npm rates a package by the
+      // worst advisory reaching it, so without this a moderate advisory that
+      // shares a package with an accepted high one would block as if it were
+      // high itself.
+      if ((RANK[root.severity] ?? RANK[entry.severity] ?? 0) < minRank) continue
+
       const acceptance = allowed.get(root.id)
       if (!acceptance) {
         blocking.push({ name, ...root })
