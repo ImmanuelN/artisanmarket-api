@@ -129,6 +129,17 @@ export function rootAdvisories(name, vulns, seen = new Set()) {
 }
 
 /**
+ * The advisories behind a package that reach the threshold, each judged on its
+ * own severity. npm rates a package by the worst advisory reaching it, so
+ * judging by that rating would let a moderate advisory sharing a package with
+ * an accepted high one block as if it were high itself. The package rating is
+ * used only when an advisory carries no severity of its own.
+ */
+function atOrAbove(roots, entry, minRank) {
+  return roots.filter((root) => (RANK[root.severity] ?? RANK[entry.severity] ?? 0) >= minRank)
+}
+
+/**
  * Decide the gate. Pure: the same report, allowlist and date always give the
  * same answer.
  *
@@ -158,7 +169,7 @@ export function evaluate(report, allowlist, { minLevel = 'high', today }) {
       continue
     }
 
-    for (const root of roots) {
+    for (const root of atOrAbove(roots, entry, minRank)) {
       const acceptance = allowed.get(root.id)
       if (!acceptance) {
         blocking.push({ name, ...root })
