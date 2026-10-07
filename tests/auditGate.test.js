@@ -178,6 +178,32 @@ describe('evaluate', () => {
     expect(result.accepted[0].packages).toEqual(['braces', 'jest', 'micromatch'])
   })
 
+  test('judges each advisory on its own severity, not the package rating it shares', () => {
+    // 2026-10-06: npm rated the jest packages "high" because the accepted
+    // braces advisory reaches them, and a new MODERATE advisory (sprintf-js)
+    // reached the same packages. Judging by the package rating blamed the
+    // moderate advisory for the high, and blocked on something below threshold.
+    const report = bracesTree()
+    report.vulnerabilities['sprintf-js'] = { severity: 'moderate', via: [advisory(OTHER, 'moderate')] }
+    report.vulnerabilities.jest.via.push('sprintf-js')
+    const result = evaluate(report, [accept(BRACES)], { today: TODAY })
+    expect(result.blocking).toEqual([])
+    expect(result.failed).toBe(false)
+  })
+
+  test('still blocks that same advisory once it is at or above the threshold', () => {
+    const report = bracesTree()
+    report.vulnerabilities['sprintf-js'] = { severity: 'moderate', via: [advisory(OTHER, 'moderate')] }
+    report.vulnerabilities.jest.via.push('sprintf-js')
+    const result = evaluate(report, [accept(BRACES)], { minLevel: 'moderate', today: TODAY })
+    expect(result.blocking.map((b) => b.id)).toContain(OTHER)
+  })
+
+  test('falls back to the package rating when an advisory carries no severity', () => {
+    const report = { vulnerabilities: { x: { severity: 'high', via: [{ url: `https://github.com/advisories/${OTHER}`, title: 't' }] } } }
+    expect(evaluate(report, [], { today: TODAY }).blocking.map((b) => b.id)).toEqual([OTHER])
+  })
+
   test('still blocks a different advisory when one is accepted', () => {
     const report = bracesTree()
     report.vulnerabilities.lodash = { severity: 'critical', via: [advisory(OTHER, 'critical')] }
