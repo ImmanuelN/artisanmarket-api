@@ -39,7 +39,7 @@ import { pathToFileURL } from 'node:url'
  * outcome. An optional control is reported but does not affect the verdict.
  */
 const CONTROL_TABLE = `
-threat-model | Plan    | Threat model present             | docs/threat-model.md   | OUTCOME_THREAT_MODEL | required | 6.2.1        | Art. 25(1)
+threat-model | Plan    | Threat model gate                | docs/threat-model      | OUTCOME_THREAT_MODEL | required | 6.2.1        | Art. 25(1)
 eslint       | Code    | Security lint ruleset            | ESLint                 | OUTCOME_ESLINT       | required | 6.2.4        | Art. 25(1)
 tests        | Code    | Security regression tests        | Jest / Vitest          | OUTCOME_TESTS        | required | 6.2.4        | Art. 32(1)(d)
 gitleaks     | Code    | Secret scanning                  | Gitleaks               | OUTCOME_GITLEAKS     | required | 8.6.2        | Art. 32(1)(b)
