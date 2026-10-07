@@ -7,8 +7,10 @@ name: DevSecOps Pipeline
 #                                      SAST, secret scanning, SCA baseline
 #   staging  →  + Build + Staging      deep scanning before release:
 #                                      SCA, container, IaC, DAST
-#   main     →  + Deploy + Monitor     full production release gate and
-#                                      continuous compliance summary
+#   main     →  + Deploy + Monitor     full production release gate, and a
+#                                      compliance report built from the
+#                                      actual result of every control. main
+#                                      is also re-verified on a daily schedule.
 #
 # Each stage is cumulative: staging re-runs everything dev runs, and main
 # re-runs everything staging runs.
@@ -26,6 +28,17 @@ on:
     branches: [dev, staging, main, master]
   pull_request:
     branches: [dev, staging, main, master]
+  # Monitor: main is re-verified daily, without needing a commit. A commit that
+  # passed every gate can still become vulnerable when an advisory is published
+  # against something it already ships. That happened twice — CVE-2026-103111
+  # in pcre2 and GHSA-vfj7-8cjw-p6xm in braces — and both surfaced only because
+  # an unrelated commit happened to trigger a run. A scheduled run on the default
+  # branch resolves to production, so it runs every stage.
+  # GitHub disables scheduled workflows in a public repository after 60 days
+  # without activity; re-enable from the Actions tab if that happens.
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
 
 # Least privilege at workflow level; security-events: write is granted only to
 # the job that uploads SARIF (S8233).
@@ -67,9 +80,12 @@ jobs:
     name: "Plan · threat model present"
     needs: context
     runs-on: ubuntu-latest
+    outputs:
+      threat_model: ${{ steps.threat-model.outcome }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify a reviewed threat model exists
+        id: threat-model
         run: |
           if [ ! -f docs/threat-model.md ]; then
             echo "::error::No docs/threat-model.md found. Threat modelling (OWASP Threat Dragon) must be completed and signed off before this feature proceeds to Code (Section 4.3.1)."
@@ -85,6 +101,13 @@ jobs:
       security-events: write
     needs: [context, plan-check]
     runs-on: ubuntu-latest
+    # Step outcomes are exported so the Monitor stage can report each control
+    # on its own rather than the job as a whole.
+    outputs:
+      eslint: ${{ steps.eslint.outcome }}
+      tests: ${{ steps.tests.outcome }}
+      gitleaks: ${{ steps.gitleaks.outcome }}
+      sast: ${{ steps.sast.outcome }}
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -99,6 +122,7 @@ jobs:
       - run: npm ci --ignore-scripts
 
       - name: ESLint (security ruleset)
+        id: eslint
         run: |
           if ls .eslintrc* >/dev/null 2>&1 || ls eslint.config.* >/dev/null 2>&1; then
             npm run lint
@@ -123,16 +147,35 @@ jobs:
           key: mongodb-binaries-${{ runner.os }}
 
       - name: Unit tests with coverage
+        id: tests
         if: '!cancelled()'
         run: npm run test:coverage
 
+      # Push and pull_request scans cover only the commits being introduced. On
+      # schedule and workflow_dispatch, Gitleaks scans the full history of every
+      # ref the checkout fetched — and fetch-depth: 0 fetches every branch,
+      # including the seeded-case branches, which carry a deliberately committed
+      # secret. A monitoring run measures the branch that ships, so its history
+      # scan is scoped to that branch. Tags are kept; all of them are on main.
+      - name: Scope the history scan to the branch being verified
+        if: "!cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')"
+        env:
+          KEEP: ${{ github.ref_name }}
+        run: |
+          git for-each-ref --format='%(refname)' refs/remotes/origin refs/heads \
+            | grep -vxE "refs/(remotes/origin|heads)/(${KEEP}|HEAD)" \
+            | xargs -r -n1 git update-ref -d
+          echo "Refs in scope: $(git for-each-ref --format='%(refname:short)' refs/heads refs/remotes | tr '\n' ' ')"
+
       - name: Gitleaks (secret scanning)
+        id: gitleaks
         if: '!cancelled()'
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: SonarQube (SAST)
+        id: sast
         if: '!cancelled() && env.SONAR_TOKEN != '''' && env.SONAR_HOST_URL != '''''
         uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
 
@@ -145,6 +188,8 @@ jobs:
     name: "Code · SCA baseline (npm audit)"
     needs: [context, plan-check]
     runs-on: ubuntu-latest
+    outputs:
+      audit: ${{ steps.audit.outcome }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -172,6 +217,7 @@ jobs:
       # empty, malformed or error output — a registry outage, say — is a
       # failure, never a clean tree.
       - name: Dependency audit
+        id: audit
         run: |
           npm audit --json > npm-audit.json || true
           node scripts/audit-gate.js npm-audit.json --level=high
@@ -182,6 +228,11 @@ jobs:
     needs: [context, code-security, dependency-audit]
     if: needs.context.outputs.deep_scan == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      snyk: ${{ steps.snyk.outcome }}
+      trivy_image: ${{ steps.trivy-image.outcome }}
+      trivy_fs: ${{ steps.trivy-fs.outcome }}
+      iac: ${{ steps.checkov-k8s.outcome }}
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
@@ -215,6 +266,7 @@ jobs:
           fi
 
       - name: Snyk (SCA)
+        id: snyk
         if: env.SNYK_TOKEN != ''
         uses: snyk/actions/node@b075801f26076be9bb50521154cafab73f44da0c # master
         continue-on-error: true
@@ -230,6 +282,7 @@ jobs:
         run: docker build -t artisanmarket-api:${{ github.sha }} .
 
       - name: Trivy (container image scan)
+        id: trivy-image
         if: "!cancelled() && steps.detect.outputs.dockerfile == 'true'"
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -238,6 +291,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy (dependency and config scan of the working tree)
+        id: trivy-fs
         if: '!cancelled()'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -248,6 +302,7 @@ jobs:
           exit-code: "1"
 
       - name: Checkov (IaC scan — Kubernetes manifests)
+        id: checkov-k8s
         if: "!cancelled() && steps.detect.outputs.k8s == 'true'"
         uses: bridgecrewio/checkov-action@5798bad4f6dd9c1fb67ae3ec10d42d8fb67037c4 # v12.3126.0
         with:
@@ -269,6 +324,8 @@ jobs:
     needs: [context, code-security, build-security]
     if: needs.context.outputs.deep_scan == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      dast: ${{ steps.zap.outcome }}
     services:
       mongodb:
         image: mongo:7
@@ -316,6 +373,7 @@ jobs:
           echo "API healthy on http://localhost:5000"
 
       - name: OWASP ZAP baseline scan (DAST)
+        id: zap
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: "http://localhost:5000"
@@ -339,27 +397,63 @@ jobs:
     if: needs.context.outputs.production == 'true'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All upstream gates passed — build ${{ github.sha }} is cleared for production release."
+      - name: Release decision
+        env:
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "Re-verification: every upstream gate still passes for $SHA. Nothing is released by this run."
+          else
+            echo "All upstream gates passed — build $SHA is cleared for production release."
+          fi
 
-  # ---- Monitor (4.3.9): continuous compliance summary — main only ----
+  # ---- Monitor: compliance report from the actual result of every control ----
+  #
+  # Runs on main after every promotion and on the daily schedule. It reads the
+  # outcome of each control from the jobs above, so a control that failed or
+  # never ran is reported as such. The summary it replaces printed fixed text,
+  # and said the release gate had passed on runs where the gate was skipped.
+  #
+  # The report maps each control to the PCI DSS and GDPR requirement it
+  # supports, lists the advisories the dependency gate is accepting and when
+  # each must be reviewed, and fails unless every required control passed. A
+  # copy is kept as a run artifact for 90 days, giving the posture a dated
+  # history. See scripts/compliance-report.js.
   monitor:
     name: "Monitor · compliance summary"
-    needs: [context, release-gate]
+    needs: [context, plan-check, code-security, dependency-audit, build-security, staging-dast, release-gate]
     if: always() && needs.context.outputs.production == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Write compliance summary
-        run: |
-          {
-            echo "## Continuous compliance summary — ${{ github.sha }}";
-            echo "";
-            echo "Promotion target: **${{ needs.context.outputs.target }}**";
-            echo "";
-            echo "- Threat model (Plan): checked in plan-check";
-            echo "- SAST / secret scanning (Code): SonarQube, Gitleaks, ESLint — runs on dev, staging, main";
-            echo "- SCA (Code/Build): npm audit on every branch, Snyk on staging and main";
-            echo "- Container / IaC (Build): Trivy, Checkov — runs on staging and main";
-            echo "- DAST (Staging): OWASP ZAP baseline against the live API — runs on staging and main";
-            echo "- Release gate (Deploy): passed";
-            echo "- PCI DSS / GDPR alignment (Section 8 assumption): manual review pending, not yet automated";
-          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Build the compliance report
+        env:
+          OUTCOME_THREAT_MODEL: ${{ needs.plan-check.outputs.threat_model }}
+          OUTCOME_ESLINT: ${{ needs.code-security.outputs.eslint }}
+          OUTCOME_TESTS: ${{ needs.code-security.outputs.tests }}
+          OUTCOME_GITLEAKS: ${{ needs.code-security.outputs.gitleaks }}
+          OUTCOME_SAST: ${{ needs.code-security.outputs.sast }}
+          OUTCOME_SCA: ${{ needs.dependency-audit.outputs.audit }}
+          OUTCOME_SNYK: ${{ needs.build-security.outputs.snyk }}
+          OUTCOME_TRIVY_FS: ${{ needs.build-security.outputs.trivy_fs }}
+          OUTCOME_TRIVY_IMAGE: ${{ needs.build-security.outputs.trivy_image }}
+          OUTCOME_IAC: ${{ needs.build-security.outputs.iac }}
+          OUTCOME_DAST: ${{ needs.staging-dast.outputs.dast }}
+          OUTCOME_RELEASE_GATE: ${{ needs.release-gate.result }}
+        run: node scripts/compliance-report.js
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: compliance-report
+          path: |
+            compliance-report.md
+            compliance-report.json
+          retention-days: 90
+          if-no-files-found: error
