@@ -75,7 +75,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Promotion target: $TARGET (deep scan: $DEEP, production: $PROD)"
 
-  # ---- Plan (4.3.1): manual gate, checked here as an artifact-presence check ----
+  # ---- Plan (4.3.1): threat model gate ----
+  #
+  # docs/threat-model.json is an OWASP Threat Dragon v2 model. The gate fails if
+  # any High or Critical threat is Open, if a threat marked Mitigated or Accepted
+  # does not state its mitigation, or if the model has no threats at all. It
+  # replaces a check that passed on any file named docs/threat-model.md.
   plan-check:
     name: "Plan · threat model present"
     needs: context
@@ -84,14 +89,12 @@ jobs:
       threat_model: ${{ steps.threat-model.outcome }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Verify a reviewed threat model exists
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Threat model gate (OWASP Threat Dragon)
         id: threat-model
-        run: |
-          if [ ! -f docs/threat-model.md ]; then
-            echo "::error::No docs/threat-model.md found. Threat modelling (OWASP Threat Dragon) must be completed and signed off before this feature proceeds to Code (Section 4.3.1)."
-            exit 1
-          fi
-          echo "Threat model present: docs/threat-model.md"
+        run: node scripts/threat-model-gate.js docs/threat-model.json
 
   # ---- Code (4.3.2, 4.3.3): SAST + secret scanning — runs on dev, staging and main ----
   code-security:
